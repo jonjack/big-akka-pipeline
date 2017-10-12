@@ -1,0 +1,19 @@
+
+# You can use the following command to list all untracked files, 
+# to gauge what will be included in the index/commit.
+# $ git status --untracked-files
+
+
+#-------- SBT --------
+dist/
+target/
+project/project/
+project/target/
+
+
+#------ intelliJ -----
+.idea/
+
+
+#-------- OSX --------
+.DS_Store
