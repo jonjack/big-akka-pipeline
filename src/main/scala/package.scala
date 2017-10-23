@@ -11,13 +11,15 @@ package object cargo {
 
   // Get an Actor Factory and Materializer (these will be implicitly used)
   implicit val system = ActorSystem("SimpleAggregator")
+
   implicit val materializer = ActorMaterializer()
 
   // We need this to help close down the Actor system onComplete
   implicit val ec = system.dispatcher
 
-  private val config = ConfigFactory.load()
   private val tZero = System.currentTimeMillis()
+
+  private val config = ConfigFactory.load()
 
   def conf(s: String) = config.getString(s)
 
