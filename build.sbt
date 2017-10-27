@@ -23,3 +23,7 @@ libraryDependencies ++= {
 }
 
 resolvers += "SBT Releases" at "https://dl.bintray.com/sbt/sbt-plugin-releases/"
+
+enablePlugins(JavaAppPackaging)
+
+//mainClass in Compile := Some("streams.SimpleGraph")
