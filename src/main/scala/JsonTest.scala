@@ -1,9 +1,4 @@
 
-import dispatch._
-import scala.concurrent.duration._
-import scala.concurrent.{Future, ExecutionContext}
-import org.json4s.JsonAST.{JValue, JString}
-import scala.collection.immutable._
 
 object JsonTest {
 

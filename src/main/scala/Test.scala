@@ -1,8 +1,7 @@
 import java.nio.file.{Path, Paths}
 
-import akka.NotUsed
-import akka.actor.ActorSystem
-import akka.stream.{ActorMaterializer, IOResult}
+import akka.event.{Logging, LoggingAdapter}
+import akka.stream.IOResult
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import cargo._
@@ -11,11 +10,15 @@ import scala.concurrent.Future
 
 object Test extends App {
 
+  val log: LoggingAdapter = Logging.getLogger(system, this)
+  log.debug("LOGGED BY LOG")
+  log.info("LOGGED BY LOG")
+
   printr("API rate: " + conf("api-rate"))
   printr("Inbound dir: " + conf("inbound-dir"))
-  printr("Batch file: " + conf("batch-file"))
+  printr("Source file: " + conf("source"))
 
-  val path: String = conf("inbound-dir") + "/" + conf("batch-file")
+  val path: String = conf("inbound-dir") + "/" + conf("source")
   val file: Path = Paths.get(path)
 
   val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(file)

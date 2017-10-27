@@ -1,0 +1,11 @@
+2017-10-27  INFO  a.e.s.Slf4jLogger - Slf4jLogger started
+2017-10-27 10:30:40.760UTC DEBUG a.e.EventStream - logger log1-Slf4jLogger started
+2017-10-27 10:30:40.761UTC DEBUG a.e.EventStream - Default Loggers started
+2017-10-27 10:30:40.802UTC DEBUG Test$ - LOGGED BY LOG
+2017-10-27 10:30:40.803UTC INFO  Test$ - LOGGED BY LOG
+2017-10-27  INFO  a.e.s.Slf4jLogger - Slf4jLogger started
+2017-10-27 10:31:30.769UTC DEBUG a.e.EventStream - logger log1-Slf4jLogger started
+2017-10-27 10:31:30.771UTC DEBUG a.e.EventStream - Default Loggers started
+2017-10-27 10:31:30.812UTC DEBUG Test$ - LOGGED BY LOG
+2017-10-27 10:31:30.813UTC INFO  Test$ - LOGGED BY LOG
+2017-10-27 10:31:30.944UTC DEBUG a.e.EventStream - shutting down: StandardOutLogger started

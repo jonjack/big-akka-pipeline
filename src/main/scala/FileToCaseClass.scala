@@ -2,13 +2,11 @@ import java.nio.file.{Path, Paths}
 
 import akka.NotUsed
 import akka.stream.IOResult
-import akka.stream.scaladsl.{FileIO, Flow, Framing, RunnableGraph, Sink, Source}
+import akka.stream.scaladsl.{FileIO, Flow, RunnableGraph, Sink, Source}
 import akka.util.ByteString
-import cargo.{conf, system}
 import spray.json.DefaultJsonProtocol
 
 import scala.concurrent.Future
-import spray.json._
 
 case class Customer (
                      bpid: String,
