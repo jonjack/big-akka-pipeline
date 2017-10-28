@@ -17,3 +17,6 @@ project/target/
 
 #-------- OSX --------
 .DS_Store
+
+#-------- SBT --------
+logs/
