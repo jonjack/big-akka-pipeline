@@ -11,39 +11,52 @@ import uk.co.britishgas.batch._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-/*
- * Batch creator of OAM records.
- *
- * As a batch consumer of the POST operation on the Users API, this
- * Akka HTTP client will take a potentially unbounded Source of
- * Contact Person records and make a HTTP POST Request on /users for
- * each.
- *
+/** Batch creator of OAM records.
+ * An Akka stream workflow which will process a potentially unbounded source
+ * of "customer" elements and create an OAM record for each by consuming an
+ * API - specifically making HTTP POST Requests on /users.
  * On completion, this client generates two logs - Success and Failure.
+ *
+ * A note on throttling
+ * --------------------
+ * The flow incorporates a throttle to control the rate at which the stream of elements
+ * is emitted through the flow, otherwise we will overwhelm the API with too many requests
+ * which will likely result in failures.
+ * rate = elements / per sec
+ * throttle(elements: Int, per: FiniteDuration, maximumBurst: Int, mode: ThrottleMode)
+ * Using burst set to rate - this could be increased if performance issues are encountered.
+ * Throttle mode should be "shaping" since this does not throw exceptions in the event of
+ * backpressure.
  */
 object Client extends App {
 
   private val log: LoggingAdapter = Logging.getLogger(system, this)
-  private val path: String = conf("inbound-dir") + "/" + conf("source")
-  private val file: Path = Paths.get(path)
-  private val rate: String = conf("api-rate")
+  private val file: String = conf("source-dir") + "/" + conf("source-file")
+  private val path: Path = Paths.get(file)
+  private val protocol: String = conf("protocol")
+  private val apiHost: String = conf("api-host")
+  private val apiPath: String = conf("api-path")
+  private val endpoint: String = protocol + "://" + apiHost + apiPath
+  private val apiRate: Int = conf("api-rate").toInt
 
-  printg("Source: " + file + " Rate: " + rate)
+  log.info("Source: " + path)
+  log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(file)
+  val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   val flow = Flow[ByteString].
     via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
-    throttle(1, 1.second, 1, ThrottleMode.shaping).
-    map(bs => bs.utf8String)
+    throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
+    map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
 
   val sink = Sink.foreach(println)
 
   /*
    * The secret to getting this to work was to use runWith(sink) rather than to(sink).
    */
+  //val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
   val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
 
 }
