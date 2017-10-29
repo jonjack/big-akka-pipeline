@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <encoder>
@@ -10,9 +9,8 @@
         </encoder>
     </appender>
 
-
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/cargo.log</file>
+        <file>logs/app.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -20,6 +18,30 @@
             <!--<pattern>%d{HH:mm:ss.SSS} | %-5level | %thread | %X{akkaSource} | %logger{1} | %m%n%rEx</pattern>-->
         </encoder>
     </appender>
+
+    <appender name="SUCCESS-FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/success.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FAILURE-FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/failure.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="success" additivity="false">
+        <appender-ref ref="SUCCESS-FILE"/>
+    </logger>
+
+    <logger name="failure" additivity="false">
+        <appender-ref ref="FAILURE-FILE"/>
+    </logger>
 
     <!--<logger name="akka" level="DEBUG" />-->
 

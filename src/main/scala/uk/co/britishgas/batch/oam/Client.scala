@@ -24,25 +24,32 @@ import scala.concurrent.duration._
  * which will likely result in failures.
  * rate = elements / per sec
  * throttle(elements: Int, per: FiniteDuration, maximumBurst: Int, mode: ThrottleMode)
- * Using burst set to rate - this could be increased if performance issues are encountered.
+ * burst is set to rate - this could be increased if performance issues are encountered.
  * Throttle mode should be "shaping" since this does not throw exceptions in the event of
  * backpressure.
  */
 object Client extends App {
 
   private val log: LoggingAdapter = Logging.getLogger(system, this)
+  private val logsuccess: LoggingAdapter = Logging.getLogger(system, "success")
+  private val logfailure: LoggingAdapter = Logging.getLogger(system, "failure")
+
   private val file: String = conf("source-dir") + "/" + conf("source-file")
   private val path: Path = Paths.get(file)
+
   private val protocol: String = conf("protocol")
   private val apiHost: String = conf("api-host")
   private val apiPath: String = conf("api-path")
   private val endpoint: String = protocol + "://" + apiHost + apiPath
+
   private val apiRate: Int = conf("api-rate").toInt
 
   log.info("Source: " + path)
   log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
 
   import scala.concurrent.ExecutionContext.Implicits.global
+
+  //val conn = Http().cachedHostConnectionPoolHttps,[Int]("x.x.x.x", 443)
 
   val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
