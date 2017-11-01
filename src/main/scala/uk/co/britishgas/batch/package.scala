@@ -9,6 +9,9 @@ import com.typesafe.config.{Config, ConfigFactory}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
+/**
+  * Values that are global to all batch components.
+  */
 package object batch {
 
   implicit val system: ActorSystem = ActorSystem("batch")

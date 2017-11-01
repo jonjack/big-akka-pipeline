@@ -53,6 +53,13 @@ object Client extends App {
 
   val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
+  /*
+   * How to find out if the response can be marshalled into a { data: ... } or { errors: ... }
+   * Json Api Response?
+   * See - https://github.com/spray/spray-json#providing-jsonformats-for-unboxed-types
+   * We could try and use regular expressions and match on those for the response body.
+   *
+   */
   val flow = Flow[ByteString].
     via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
     throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
