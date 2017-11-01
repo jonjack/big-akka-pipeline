@@ -3,6 +3,9 @@ package uk.co.britishgas.batch.oam
 import java.nio.file.{Path, Paths}
 
 import akka.event.{Logging, LoggingAdapter}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.HttpMethods.GET
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
@@ -10,6 +13,7 @@ import uk.co.britishgas.batch._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.Try
 
 /** Batch creator of OAM records.
  * An Akka stream workflow which will process a potentially unbounded source
@@ -37,15 +41,16 @@ object Client extends App {
   private val file: String = conf("source-dir") + "/" + conf("source-file")
   private val path: Path = Paths.get(file)
 
-  private val protocol: String = conf("protocol")
+  //private val protocol: String = conf("protocol")
   private val apiHost: String = conf("api-host")
+  private val apiPort: Int = conf("api-port").toInt
   private val apiPath: String = conf("api-path")
-  private val endpoint: String = protocol + "://" + apiHost + apiPath
+ // private val endpoint: String = protocol + "://" + apiHost + apiPath
 
   private val apiRate: Int = conf("api-rate").toInt
 
   log.info("Source: " + path)
-  log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
+  //log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -53,6 +58,40 @@ object Client extends App {
 
   val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
+  /*
+  val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
+    Http().cachedHostConnectionPoolHttps[String]("api.bitfinex.com", apiPort)
+
+  val flow1 = source.
+    via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
+    throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
+    map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
+
+  val fut: Future[Map[String, HttpResponse]] =
+    source.
+      map(symbol => (HttpRequest(GET, s"/v1/stats/$symbol"), symbol)). // we are using the coin symbol as the request ID
+      via(connection).
+      runFold(Map.empty[String, HttpResponse]) {
+
+        // This case drills down into successful Responses to log based on whether we got a HTTP Status code 200 or not
+        case (map, (util.Success(resp), symbol)) => {
+          resp.status.intValue match {
+            case 200 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
+              logsuccess.info("Status OK 200 [" + symbol + "] BODY[" + body.utf8String + "]")
+            }
+            case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
+              logfailure.info("Status " + status + " [" + symbol + "] BODY[" + body.utf8String + "]")
+            }
+          }
+          map ++ Map(symbol -> resp)}
+
+        // This case catches the situations where we did not get a response back for some reason.
+        case (map, (util.Failure(ex), symbol)) => {
+          logfailure.info("Exception " + ex.getMessage)
+          map
+        }
+      }
+      */
   /*
    * How to find out if the response can be marshalled into a { data: ... } or { errors: ... }
    * Json Api Response?

@@ -11,46 +11,28 @@ object Model {
     val brands = Seq(BG, SE)
   }
 
-  import Brands._
+  case class Customer(title: String, `first-name`: String, surname: String, email: String,
+                       brands: Set[String], status: String, channel: String)
 
-  case class Customer (title: String, firstName: String, surname: String,
-                       email: String, brands: Set[String], status: String, channel: String)
-
-  /*
-   * JSON API stupidly has a field called "type" which is reserved in many languages.
-   * Use backticks to name a field with a reserved word ie. `type`
-   */
-  case class JsonApiData (id: String, `type`: String, attributes: Customer)
+  case class JsonApiData (id: String, `type`: String = "users", attributes: Customer)
   case class JsonApiWrapper (data: JsonApiData)
 
-  object CustomerProtocol extends DefaultJsonProtocol {
+  object OAMProtocol {
+    import DefaultJsonProtocol._
     implicit val printer = PrettyPrinter
-    implicit val custFormat = jsonFormat7(Customer)
+    implicit val custFormat: JsonFormat[Customer] = jsonFormat7(Customer)
+    implicit val jadFormat: JsonFormat[JsonApiData] = jsonFormat3(JsonApiData)
+    implicit val jawFormat: RootJsonFormat[JsonApiWrapper] = jsonFormat1(JsonApiWrapper)
   }
 
-  import CustomerProtocol._
+  import DefaultJsonProtocol._
+  import OAMProtocol._
 
-  object JsonApiDataProtocol extends DefaultJsonProtocol {
-    implicit val printer = PrettyPrinter
-    implicit val jadFormat = jsonFormat3(JsonApiData)
-  }
+  val cust = Customer("Mr", "Harry", "Callahan", "harry42callahan.com", Set("BG"), "active", "PPOT3")
+  val json = cust.toJson
 
-  import JsonApiDataProtocol._
-
-  object JsonApiWrapperProtocol extends DefaultJsonProtocol {
-    implicit val printer = PrettyPrinter
-    implicit val jawFormat = jsonFormat1(JsonApiWrapper)
-  }
-
-  import JsonApiWrapperProtocol._
-
-  val cust1 = Customer("Ms", "Tera", "Patrick", "tera@hotmail.com", Set("BG"), "Active", "POT3")
-  val cust2 = Customer("Ms", "Tera", "Patrick", "tera@hotmail.com", Set("BG", "SE"), "Active", "POT3")
-  val cust1json = cust1.toJson
-  val cust2json = cust2.toJson
-
-  //val jad = JsonApiData("00300535746106", "users", cust1)
-  val jaw = JsonApiWrapper(JsonApiData("00300535746106", "users", cust2))
+  val jad = JsonApiData("003610070899", "users", cust)
+  val jaw = JsonApiWrapper(jad)
   val jawjson = jaw.toJson
 
 
@@ -69,6 +51,27 @@ object Model {
   //val t2j = t2.toJson
 
 }
+
+  /*
+{
+  "data": {
+  "id": "003610070899",
+  "type": "users",
+  "attributes": {
+    "brands": [
+      "SE",
+      "BG"
+     ],
+    "title": "Mr",
+    "first-name": "Harry",
+    "surname": "Callahan",
+    "email": "harry42callahan805@gmail.com",
+    "status": "active",
+    "channel": "PPOT3"
+    }
+  } // close of `data`
+}
+*/
 
 /*
 import model.OAMModel._
