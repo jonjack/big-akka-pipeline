@@ -25,30 +25,30 @@ object Model {
     implicit val jawFormat: RootJsonFormat[JsonApiWrapper] = jsonFormat1(JsonApiWrapper)
   }
 
-  import DefaultJsonProtocol._
   import OAMProtocol._
 
+  // Lets run a small test of the implicit marshallers
   val cust = Customer("Mr", "Harry", "Callahan", "harry42callahan.com", Set("BG"), "active", "PPOT3")
   val json = cust.toJson
-
   val jad = JsonApiData("003610070899", "users", cust)
   val jaw = JsonApiWrapper(jad)
-  val jawjson = jaw.toJson
+  val jawjson = jaw.toJson.prettyPrint
 
-
-  //val c1 = Customer("Ms", "Tera", "Patrick", "tera@hotmail.com", Set("BG"), "Active", "POT3").toJson
-
-  case class Test(mandatory: String, var optional: String)
-
-  val t1 = Test("Mandatory", "Optional")
-  //val t2 = Test("Mandatory")
-
-  object TestJsonProtocol extends DefaultJsonProtocol {
-    implicit val testFormat = jsonFormat2(Test)
-  }
-
-  //val t1j: JsValue = t1.toJson
-  //val t2j = t2.toJson
+  val test: Boolean = jawjson == """{""" + "\n" +
+    """  "data": {""" + "\n" +
+    """    "id": "003610070899",""" + "\n" +
+    """    "type": "users",""" + "\n" +
+    """    "attributes": {""" + "\n" +
+    """      "channel": "PPOT3",""" + "\n" +
+    """      "email": "harry42callahan.com",""" + "\n" +
+    """      "surname": "Callahan",""" + "\n" +
+    """      "status": "active",""" + "\n" +
+    """      "brands": ["BG"],""" + "\n" +
+    """      "first-name": "Harry",""" + "\n" +
+    """      "title": "Mr"""" + "\n" +
+    """    }""" + "\n" +
+    """  }""" + "\n" +
+    """}"""
 
 }
 
