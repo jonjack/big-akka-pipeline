@@ -1,10 +1,9 @@
 package uk.co.britishgas.batch.oam
 
-import spray.json._
-import uk.co.britishgas.batch.{JsonApiData, JsonApiRoot, system}
-import Model._
 import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.marshalling.GenericMarshallers
+import spray.json._
+import uk.co.britishgas.batch.oam.Model._
+import uk.co.britishgas.batch.{JsonApiData, JsonApiRoot, system}
 
 import scala.util.{Failure, Success, Try}
 
@@ -20,8 +19,6 @@ object Marshallers {
     implicit val dataFormat: JsonFormat[JsonApiData[Customer]] = jsonFormat3(JsonApiData[Customer])
     implicit val rootFormat: RootJsonFormat[JsonApiRoot[Customer]] = jsonFormat1(JsonApiRoot[Customer])
   }
-
-  import CustomerJsonProtocol._
 
   // TODO - Move to test package
   // A test of the implicit marshallers

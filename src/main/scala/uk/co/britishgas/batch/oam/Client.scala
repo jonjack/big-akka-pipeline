@@ -2,13 +2,14 @@ package uk.co.britishgas.batch.oam
 
 import java.nio.file.{Path, Paths}
 
+import akka.NotUsed
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.HttpMethods.GET
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
+import spray.json._
 import uk.co.britishgas.batch._
 import uk.co.britishgas.batch.oam.Marshallers._
 
@@ -35,41 +36,62 @@ import scala.util.Try
  */
 object Client extends App {
 
-  private val log: LoggingAdapter = Logging.getLogger(system, this)
-  private val logsuccess: LoggingAdapter = Logging.getLogger(system, "success")
-  private val logfailure: LoggingAdapter = Logging.getLogger(system, "failure")
+  private val log: LoggingAdapter         = Logging.getLogger(system, this)
+  private val logsuccess: LoggingAdapter  = Logging.getLogger(system, "success")
+  private val logfailure: LoggingAdapter  = Logging.getLogger(system, "failure")
+  private val protocol: String            = conf("protocol")
+  private val apiHost: String             = conf("api-host")
+  private val apiPath: String             = conf("api-path")
+  private val apiPort: Int                = conf("api-port").toInt
+  private val throttleRate: Int           = conf("throttle-rate").toInt
+  private val throttleBurst: Int          = conf("throttle-burst").toInt
+  private val endpoint: String            = protocol + "://" + apiHost + apiPath
+  private val file: String                = conf("source-dir") + "/" + conf("source-file")
+  private val path: Path                  = Paths.get(file)
 
-  private val file: String = conf("source-dir") + "/" + conf("source-file")
-  private val path: Path = Paths.get(file)
+  log.info(
+    "Starting Batch Job with the following configuration: \n" +
+    "Source: " + file + "\n" +
+    "Endpoint: " + endpoint + "\n" +
+    "Rate: " + throttleRate + " requests/sec \n"
+  )
 
-  //private val protocol: String = conf("protocol")
-  private val apiHost: String = conf("api-host")
-  private val apiPort: Int = conf("api-port").toInt
-  private val apiPath: String = conf("api-path")
- // private val endpoint: String = protocol + "://" + apiHost + apiPath
+  private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
-  private val throttleRate: Int = conf("throttle-rate").toInt
-  private val throttleBurst: Int = conf("throttle-burst").toInt
+  // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+  private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
 
-  log.info("Source: " + path)
-  //log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
+  /**
+    * A Flow of type ByteString => ByteString which splits a stream of ByteStrings into lines.
+    */
+  private val delimiter: Flow[ByteString, ByteString, NotUsed] =
+    Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
-  import scala.concurrent.ExecutionContext.Implicits.global
+  /**
+    * A Flow which explicitly creates back pressure on it's upstream source of elements and
+    * controls the rate at which elements are emitted downstream in the materialized graph.
+    */
+  private val throttle = Flow[ByteString].throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping)
 
-  //val conn = Http().cachedHostConnectionPoolHttps,[Int]("x.x.x.x", 443)
-
-  val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
-
-  import uk.co.britishgas.batch.oam.Marshallers._
-
-  val throttle = Flow[ByteString].
-    via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
-    throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping).
+  /**
+    * A Flow of type ByteString => (String, String) which marshalls a stream of ByteStrings into a
+    * JSON representation. The emitted tuple has a logical type of (Customer ID, Customer JSON).
+    * This flow is designed to emit into a pooled connection which, because responses are not
+    * necessarily in order of request, require some ID to map the Request->Response. In this case,
+    * we use the Customer ID as the mapping in order that any logged failures can be traced back
+    * to the customer record.
+    */
+  private val marshaller = Flow[ByteString].
     map((bs: ByteString) => { buildJson(bs.utf8String) }).
     filter((op: Option[String]) => { op.nonEmpty }).
-    map((op: Option[String]) => op.get)
+    map((op: Option[String]) => {
+      val json: String = op.get
+      val id: String = extractId(json)
+      (id, json) // emit the tuple downstream
+    })
 
-  val connection = Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
+  val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
+    Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
   val sink = Sink.foreach(println)
 

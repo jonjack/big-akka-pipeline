@@ -2,22 +2,16 @@ package uk.co.britishgas.batch.oam
 
 import java.nio.file.{Path, Paths}
 
-import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.Http
-import akka.stream.{IOResult, ThrottleMode}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
+import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import spray.json._
-import uk.co.britishgas.batch.{conf, system}
+import uk.co.britishgas.batch.oam.Marshallers._
+import uk.co.britishgas.batch.oam.Model._
+import uk.co.britishgas.batch.{conf, system, _}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import uk.co.britishgas.batch._
-import Model._
-import Marshallers.{buildJson, _}
-import uk.co.britishgas.batch.oam.Client.{throttleBurst, throttleRate}
-import uk.co.britishgas.batch.oam.TestMarshaller.in
-
 import scala.util.{Failure, Success, Try}
 
 object TestMarshaller extends App {
@@ -26,8 +20,6 @@ object TestMarshaller extends App {
   private val path: Path = Paths.get(file)
   private val throttleRate: Int = conf("throttle-rate").toInt
   private val throttleBurst: Int = conf("throttle-burst").toInt
-
-  import scala.concurrent.ExecutionContext.Implicits.global
 
   //        0      1   2      3             3               5    6     7
   // val in = "003005400124|Ms|Tera|Patrick|tera.patrick@hotmail.com|BG,SE|active|PPOT3"
