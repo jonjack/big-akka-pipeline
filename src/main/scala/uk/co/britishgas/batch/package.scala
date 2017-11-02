@@ -46,4 +46,8 @@ package object batch {
       file <- files if file.getName.endsWith(".csv")
     } file.delete()
 
+  /* JSON API wrapper classes. */
+  case class JsonApiData[T] (id: String, `type`: String, attributes: T)
+  case class JsonApiRoot[T] (data: JsonApiData[T])
+
 }

@@ -10,6 +10,7 @@ import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import uk.co.britishgas.batch._
+import uk.co.britishgas.batch.oam.Marshallers._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -47,7 +48,8 @@ object Client extends App {
   private val apiPath: String = conf("api-path")
  // private val endpoint: String = protocol + "://" + apiHost + apiPath
 
-  private val apiRate: Int = conf("api-rate").toInt
+  private val throttleRate: Int = conf("throttle-rate").toInt
+  private val throttleBurst: Int = conf("throttle-burst").toInt
 
   log.info("Source: " + path)
   //log.info("Consuming endpoint: " + endpoint + " at a rate of " + apiRate + " element(s)/sec.")
@@ -58,6 +60,28 @@ object Client extends App {
 
   val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
+  import uk.co.britishgas.batch.oam.Marshallers._
+
+  val throttle = Flow[ByteString].
+    via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
+    throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping).
+    map((bs: ByteString) => { buildJson(bs.utf8String) }).
+    filter((op: Option[String]) => { op.nonEmpty }).
+    map((op: Option[String]) => op.get)
+
+  val connection = Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
+
+  val sink = Sink.foreach(println)
+
+  val graph: Unit = source.via(throttle).runWith(sink).onComplete(_ => system.terminate())
+
+//  val fut: Future[Map[String, HttpResponse]] =
+//    source.
+//      via(throttle).
+//      map(symbol => (HttpRequest(GET, s"/v1/stats/$symbol"), symbol)). // we are using the coin symbol as the request ID
+//      //via(conn).
+
+
   /*
   val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String]("api.bitfinex.com", apiPort)
@@ -67,10 +91,12 @@ object Client extends App {
     throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
     map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
 
+  val conn = Http().cachedHostConnectionPoolHttps[String]("api.bitfinex.com", 443)
+  val symbols = List("btcusd", "ethusd", "omgusd", "xxxusd")  // xxxusd tests the non-200 Response Status case
   val fut: Future[Map[String, HttpResponse]] =
-    source.
+    Source(symbols).
       map(symbol => (HttpRequest(GET, s"/v1/stats/$symbol"), symbol)). // we are using the coin symbol as the request ID
-      via(connection).
+      via(conn).
       runFold(Map.empty[String, HttpResponse]) {
 
         // This case drills down into successful Responses to log based on whether we got a HTTP Status code 200 or not
@@ -99,18 +125,21 @@ object Client extends App {
    * We could try and use regular expressions and match on those for the response body.
    *
    */
+  /*
   val flow = Flow[ByteString].
     via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
     throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
     map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
 
-  val sink = Sink.foreach(println)
+  */
 
   /*
    * The secret to getting this to work was to use runWith(sink) rather than to(sink).
    */
   //val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
-  val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
+  //val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
+
+
 
 }
 
