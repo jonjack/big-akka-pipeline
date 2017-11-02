@@ -4,13 +4,16 @@ import java.nio.file.{Path, Paths}
 
 import akka.NotUsed
 import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
+import akka.http.scaladsl.model.headers.{BasicHttpCredentials, RawHeader}
+import akka.http.scaladsl.{Http, model}
+import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse}
+import akka.http.scaladsl.server.ContentNegotiator.Alternative.ContentType
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import spray.json._
 import uk.co.britishgas.batch._
+import uk.co.britishgas.batch.oam.Client.entity
 import uk.co.britishgas.batch.oam.Marshallers._
 
 import scala.concurrent.Future
@@ -39,27 +42,29 @@ object Client extends App {
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
   private val logsuccess: LoggingAdapter  = Logging.getLogger(system, "success")
   private val logfailure: LoggingAdapter  = Logging.getLogger(system, "failure")
-  private val protocol: String            = conf("protocol")
   private val apiHost: String             = conf("api-host")
   private val apiPath: String             = conf("api-path")
   private val apiPort: Int                = conf("api-port").toInt
   private val throttleRate: Int           = conf("throttle-rate").toInt
   private val throttleBurst: Int          = conf("throttle-burst").toInt
-  private val endpoint: String            = protocol + "://" + apiHost + apiPath
+  private val origin: String              = conf("origin")
+  private val contentType: String         = conf("content-type")
+  private val clientId: String            = conf("cid")
+  private val backendUsersKey: String     = conf("buk")
   private val file: String                = conf("source-dir") + "/" + conf("source-file")
   private val path: Path                  = Paths.get(file)
 
   log.info(
-    "Starting Batch Job with the following configuration: \n" +
-    "Source: " + file + "\n" +
-    "Endpoint: " + endpoint + "\n" +
-    "Rate: " + throttleRate + " requests/sec \n"
+      "\n\nStarting OAM Batch Job. \n" +
+      "Data source: " + file + "\n" +
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath + "\n" +
+      "At a rate of: " + throttleRate + " request/sec \n"
   )
-
-  private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
   private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+
+  private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   /**
     * A Flow of type ByteString => ByteString which splits a stream of ByteStrings into lines.
@@ -81,13 +86,13 @@ object Client extends App {
     * we use the Customer ID as the mapping in order that any logged failures can be traced back
     * to the customer record.
     */
-  private val marshaller = Flow[ByteString].
+  private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
     map((bs: ByteString) => { buildJson(bs.utf8String) }).
     filter((op: Option[String]) => { op.nonEmpty }).
     map((op: Option[String]) => {
       val json: String = op.get
       val id: String = extractId(json)
-      (id, json) // emit the tuple downstream
+      (id, json) // emit the Tuple2[String, String] downstream
     })
 
   val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
@@ -95,25 +100,55 @@ object Client extends App {
 
   val sink = Sink.foreach(println)
 
-  val graph: Unit = source.via(throttle).runWith(sink).onComplete(_ => system.terminate())
-
-//  val fut: Future[Map[String, HttpResponse]] =
-//    source.
-//      via(throttle).
-//      map(symbol => (HttpRequest(GET, s"/v1/stats/$symbol"), symbol)). // we are using the coin symbol as the request ID
-//      //via(conn).
-
-
   /*
-  val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
-    Http().cachedHostConnectionPoolHttps[String]("api.bitfinex.com", apiPort)
+  val graph: Unit = source.
+                      via(delimiter).
+                        via(throttle).
+                          via(marshaller).
+                            runWith(sink).
+                              onComplete(_ => system.terminate())
+*/
+  //val graph: Unit = source.via(throttle).runWith(sink).onComplete(_ => system.terminate())
 
-  val flow1 = source.
-    via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
-    throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
-    map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
+  import akka.http.scaladsl.model._
+  import akka.http.scaladsl.model.HttpProtocols._
+  import akka.http.scaladsl.model.MediaTypes._
+  import akka.http.scaladsl.model.HttpCharsets._
+  import akka.http.scaladsl.model.HttpMethods._
+  import akka.http.scaladsl.model.HttpRequest
 
-  val conn = Http().cachedHostConnectionPoolHttps[String]("api.bitfinex.com", 443)
+  val userData = ByteString("abc")
+
+  val body: String = """{ "name": "Jane", "favoriteNumber" : 42 }"""
+
+  val entity = HttpEntity(`application/vnd.api+json`, body)
+
+  val org = headers.Origin(origin)
+  val cid = RawHeader("X-Client-ID", clientId)
+  val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
+  val hds = List(org, cid, buk)
+
+  //HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
+
+  private def buildRequest(body: String): HttpRequest = {
+    val entity = HttpEntity(`application/vnd.api+json`, body)
+    HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
+  }
+
+  val fut =
+    source.
+      via(delimiter).
+      via(throttle).
+      via(marshaller).
+      map(tup => (buildRequest(tup._2), tup._1)).
+      runWith(sink).
+      onComplete(_ => system.terminate())
+
+      //map((id, json) => (buildRequest(json), id))) // we are using the coin symbol as the request ID
+      //via(conn).
+
+
+/*
   val symbols = List("btcusd", "ethusd", "omgusd", "xxxusd")  // xxxusd tests the non-200 Response Status case
   val fut: Future[Map[String, HttpResponse]] =
     Source(symbols).

@@ -3,11 +3,12 @@ package uk.co.britishgas
 import java.io.File
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.headers.{ModeledCustomHeader, ModeledCustomHeaderCompanion}
 import akka.stream.ActorMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Values that are global to all batch components.
@@ -50,4 +51,14 @@ package object batch {
   case class JsonApiData[T] (id: String, `type`: String, attributes: T)
   case class JsonApiRoot[T] (data: JsonApiData[T])
 
+  final class ClientIdHeader(token: String) extends ModeledCustomHeader[ClientIdHeader] {
+    override def renderInRequests = true
+    override def renderInResponses = false
+    override val companion: ClientIdHeader.type = ClientIdHeader
+    override def value: String = token
+  }
+  object ClientIdHeader extends ModeledCustomHeaderCompanion[ClientIdHeader] {
+    override val name = "X-Client-ID"
+    override def parse(value: String) = Try(new ClientIdHeader(value))
+  }
 }
