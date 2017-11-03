@@ -55,7 +55,7 @@ object Client extends App {
   private val file: String                = conf("source-dir") + "/" + conf("source-file")
   private val path: Path                  = Paths.get(file)
 
-  val jobId: Int = Random.nextInt(100000000)
+  private val jobId: Int = Random.nextInt(100000000)
 
   loganalytics.info(
     s"Starting BF job $jobId \n\n" +
@@ -92,7 +92,7 @@ object Client extends App {
       (id, json) // emit the Tuple2[String, String] downstream
     })
 
-  val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
+  private val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
   private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
@@ -102,10 +102,10 @@ object Client extends App {
   import akka.http.scaladsl.model.MediaTypes._
   import akka.http.scaladsl.model.{HttpRequest, _}
 
-  val org = headers.Origin(origin)
-  val cid = RawHeader("X-Client-ID", clientId)
-  val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
-  val hds = List(org, cid, buk)
+  private val org = headers.Origin(origin)
+  private val cid = RawHeader("X-Client-ID", clientId)
+  private val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
+  private val hds = List(org, cid, buk)
 
   private def buildRequest(body: String): HttpRequest = {
     val entity = HttpEntity(`application/vnd.api+json`, body)
@@ -140,6 +140,7 @@ object Client extends App {
         }
       }
 
+  // Map in the future then terminate the Actor system
   fut.onComplete((hr: Try[Map[String, HttpResponse]]) => {
     val respMap: Map[String, HttpResponse] = hr.get
     val total: Int = respMap.size
