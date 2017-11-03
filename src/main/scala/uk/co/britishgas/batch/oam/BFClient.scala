@@ -4,10 +4,9 @@ import java.nio.file.{Path, Paths}
 
 import akka.NotUsed
 import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.model.headers.{BasicHttpCredentials, RawHeader}
-import akka.http.scaladsl.{Http, model}
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse}
-import akka.http.scaladsl.server.ContentNegotiator.Alternative.ContentType
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
@@ -36,25 +35,23 @@ import scala.util.Try
  * Throttle mode should be "shaping" since this does not throw exceptions in the event of
  * backpressure.
  */
-object Client extends App {
+object BFClient extends App {
 
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
   private val logsuccess: LoggingAdapter  = Logging.getLogger(system, "success")
   private val logfailure: LoggingAdapter  = Logging.getLogger(system, "failure")
-  private val apiHost: String             = conf("api-host")
-  private val apiPath: String             = conf("api-path")
-  private val apiPort: Int                = conf("api-port").toInt
-  private val throttleRate: Int           = conf("throttle-rate").toInt
-  private val throttleBurst: Int          = conf("throttle-burst").toInt
-  private val origin: String              = conf("origin")
-  private val contentType: String         = conf("content-type")
-  private val clientId: String            = conf("cid")
-  private val backendUsersKey: String     = conf("buk")
-  private val file: String                = conf("source-dir") + "/" + conf("source-file")
+  private val apiHost: String             = conf("bf-api-host")
+  private val apiPath: String             = conf("bf-api-path")
+  private val apiPort: Int                = conf("bf-api-port").toInt
+  private val throttleRate: Int           = conf("bf-throttle-rate").toInt
+  private val throttleBurst: Int          = conf("bf-throttle-burst").toInt
+  private val origin: String              = conf("bf-origin")
+  private val contentType: String         = conf("bf-content-type")
+  private val file: String                = conf("bf-source-dir") + "/" + conf("bf-source-file")
   private val path: Path                  = Paths.get(file)
 
   log.info(
-      "\n\nStarting OAM Batch Job. \n" +
+      "\n\nStarting BF Batch Job. \n" +
       "Data source: " + file + "\n" +
       "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath + "\n" +
       "At a rate of: " + throttleRate + " request/sec \n"
@@ -85,14 +82,8 @@ object Client extends App {
     * we use the Customer ID as the mapping in order that any logged failures can be traced back
     * to the customer record.
     */
-  private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
-    map((bs: ByteString) => { buildJson(bs.utf8String) }).
-    filter((op: Option[String]) => { op.nonEmpty }).
-    map((op: Option[String]) => {
-      val json: String = op.get
-      val id: String = extractId(json)
-      (id, json) // emit the Tuple2[String, String] downstream
-    })
+  private val marshaller: Flow[ByteString, String, NotUsed] = Flow[ByteString].
+    map(bs => bs.utf8String)
 
   val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
@@ -109,23 +100,18 @@ object Client extends App {
 */
   //val graph: Unit = source.via(throttle).runWith(sink).onComplete(_ => system.terminate())
 
-  import akka.http.scaladsl.model._
+  import akka.http.scaladsl.model.HttpMethods._
   import akka.http.scaladsl.model.HttpProtocols._
   import akka.http.scaladsl.model.MediaTypes._
-  import akka.http.scaladsl.model.HttpCharsets._
-  import akka.http.scaladsl.model.HttpMethods._
-  import akka.http.scaladsl.model.HttpRequest
+  import akka.http.scaladsl.model.{HttpRequest, _}
 
   val userData = ByteString("abc")
 
-  //val body: String = """{ "name": "Jane", "favoriteNumber" : 42 }"""
 
-  //val entity = HttpEntity(`application/vnd.api+json`, body)
+  //val entity = HttpEntity(`application/vnd.api+json`)
 
   val org = headers.Origin(origin)
-  val cid = RawHeader("X-Client-ID", clientId)
-  val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
-  val hds = List(org, cid, buk)
+  val hds = List(org)
 
   //HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
 
@@ -139,7 +125,7 @@ object Client extends App {
       via(delimiter).
       via(throttle).
       via(marshaller).
-      map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
+      map(symbol => (HttpRequest(GET, apiPath+symbol), symbol)).
       via(connection).
       runFold(Map.empty[String, HttpResponse]) {
 
