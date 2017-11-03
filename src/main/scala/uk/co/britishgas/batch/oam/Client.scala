@@ -4,10 +4,9 @@ import java.nio.file.{Path, Paths}
 
 import akka.NotUsed
 import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.model.headers.{BasicHttpCredentials, RawHeader}
-import akka.http.scaladsl.{Http, model}
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, HttpResponse}
-import akka.http.scaladsl.server.ContentNegotiator.Alternative.ContentType
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
@@ -67,20 +66,17 @@ object Client extends App {
 
   private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
-  /**
-    * A Flow of type ByteString => ByteString which splits a stream of ByteStrings into lines.
+  /** A Flow of type ByteString => ByteString which splits a stream of ByteStrings into lines.
     */
   private val delimiter: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
-  /**
-    * A Flow which explicitly creates back pressure on it's upstream source of elements and
+  /** A Flow which explicitly creates back pressure on it's upstream source of elements and
     * controls the rate at which elements are emitted downstream in the materialized graph.
     */
   private val throttle = Flow[ByteString].throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping)
 
-  /**
-    * A Flow of type ByteString => (String, String) which marshalls a stream of ByteStrings into a
+  /** A Flow of type ByteString => (String, String) which marshalls a stream of ByteStrings into a
     * JSON representation. The emitted tuple has a logical type of (Customer ID, Customer JSON).
     * This flow is designed to emit into a pooled connection which, because responses are not
     * necessarily in order of request, require some ID to map the Request->Response. In this case,
@@ -99,49 +95,22 @@ object Client extends App {
   val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
-  val sink = Sink.foreach(println)
-
-  // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
   private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
 
-
-  /*
-  val graph: Unit = source.
-                      via(delimiter).
-                        via(throttle).
-                          via(marshaller).
-                            runWith(sink).
-                              onComplete(_ => system.terminate())
-*/
-  //val graph: Unit = source.via(throttle).runWith(sink).onComplete(_ => system.terminate())
-
-  import akka.http.scaladsl.model._
+  import akka.http.scaladsl.model.HttpMethods._
   import akka.http.scaladsl.model.HttpProtocols._
   import akka.http.scaladsl.model.MediaTypes._
-  import akka.http.scaladsl.model.HttpCharsets._
-  import akka.http.scaladsl.model.HttpMethods._
-  import akka.http.scaladsl.model.HttpRequest
-
-  val userData = ByteString("abc")
-
-  //val body: String = """{ "name": "Jane", "favoriteNumber" : 42 }"""
-
-  //val entity = HttpEntity(`application/vnd.api+json`, body)
+  import akka.http.scaladsl.model.{HttpRequest, _}
 
   val org = headers.Origin(origin)
   val cid = RawHeader("X-Client-ID", clientId)
   val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
   val hds = List(org, cid, buk)
 
-  //HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
-
   private def buildRequest(body: String): HttpRequest = {
     val entity = HttpEntity(`application/vnd.api+json`, body)
     HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
   }
-
-
-  // logrequest
 
   val fut: Future[Map[String, HttpResponse]] =
     source.
@@ -155,8 +124,6 @@ object Client extends App {
       }).
       via(connection).
       runFold(Map.empty[String, HttpResponse]) {
-
-        // This case drills down into successful Responses to log based on whether we got a HTTP Status code 200 or not
         case (map, (util.Success(resp), ucrn)) => {
           resp.status.intValue match {
             case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
@@ -167,8 +134,6 @@ object Client extends App {
             }
           }
           map ++ Map(ucrn -> resp)}
-
-        // This case catches the situations where we did not get a response back for some reason.
         case (map, (util.Failure(ex), symbol)) => {
           logfailure.info("Exception " + ex.getMessage)
           map
@@ -191,91 +156,4 @@ object Client extends App {
     system.terminate()
   })
 
-
-      //runWith(sink).
-      //onComplete(_ => system.terminate())
-
-  // print the Request tuple (ID, Request)
-//  val printRequestgraph =
-//    source.
-//      via(delimiter).
-//      via(throttle).
-//      via(marshaller).
-//      map(tup => (buildRequest(tup._2), tup._1)).
-//      runWith(sink).
-//      onComplete(_ => system.terminate())
-
-      //map((id, json) => (buildRequest(json), id))) // we are using the coin symbol as the request ID
-      //via(conn).
-
-
-/*
-  val symbols = List("btcusd", "ethusd", "omgusd", "xxxusd")  // xxxusd tests the non-200 Response Status case
-  val fut: Future[Map[String, HttpResponse]] =
-    Source(symbols).
-      map(symbol => (HttpRequest(GET, s"/v1/stats/$symbol"), symbol)). // we are using the coin symbol as the request ID
-      via(conn).
-      runFold(Map.empty[String, HttpResponse]) {
-
-        // This case drills down into successful Responses to log based on whether we got a HTTP Status code 200 or not
-        case (map, (util.Success(resp), symbol)) => {
-          resp.status.intValue match {
-            case 200 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logsuccess.info("Status OK 200 [" + symbol + "] BODY[" + body.utf8String + "]")
-            }
-            case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logfailure.info("Status " + status + " [" + symbol + "] BODY[" + body.utf8String + "]")
-            }
-          }
-          map ++ Map(symbol -> resp)}
-
-        // This case catches the situations where we did not get a response back for some reason.
-        case (map, (util.Failure(ex), symbol)) => {
-          logfailure.info("Exception " + ex.getMessage)
-          map
-        }
-      }
-      */
-  /*
-   * How to find out if the response can be marshalled into a { data: ... } or { errors: ... }
-   * Json Api Response?
-   * See - https://github.com/spray/spray-json#providing-jsonformats-for-unboxed-types
-   * We could try and use regular expressions and match on those for the response body.
-   *
-   */
-  /*
-  val flow = Flow[ByteString].
-    via(Framing.delimiter(ByteString(System.lineSeparator), 10000)).
-    throttle(apiRate, 1.second, apiRate, ThrottleMode.shaping).
-    map((bs: ByteString) => {log.info(bs.utf8String);bs.utf8String})
-
-  */
-
-  /*
-   * The secret to getting this to work was to use runWith(sink) rather than to(sink).
-   */
-  //val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
-  //val graph: Unit = source.via(flow).runWith(sink).onComplete(_ => system.terminate())
-
-
-
 }
-
-
-//val flow: Flow[ByteString, Customer, NotUsed] =
-//Flow[ByteString]
-////.via(Framing.delimiter(ByteString("\n"), 1024))
-////.via(Framing.delimiter(ByteString("|"), 1024))
-//.map(bs => bs.utf8String.trim.split("|"))
-//.map(res =>
-//res match {
-//case Array(bpid, title, firstname, surname, brand, email, channel) => Customer(bpid, title, firstname, surname, brand, email, channel)
-//case _ => Customer("30065400124", "Ms", "Tera", "Patrick", "SE", "tera.patrick@hotmail.com", "POT3")
-//})
-//
-//import MyJsonProtocol._
-//import spray.json._
-//
-//val graph: RunnableGraph[Future[IOResult]] =
-//source.via(flow).to(Sink.foreach(cust => println(cust.toJson)))
-
