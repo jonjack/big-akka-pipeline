@@ -79,7 +79,8 @@ object Marshallers {
     import CustomerJsonProtocol._
     Try {
       val inp: Array[String] = in.trim.split("\\|")
-      val cust: Customer = Customer(inp(1), inp(2), inp(3), inp(4), Set[String](inp(5)), inp(6), inp(7))
+      val brands: Set[String] = inp(5).trim.split(",").toSet
+      val cust: Customer = Customer(inp(1), inp(2), inp(3), inp(4), brands, inp(6), inp(7))
       val data: JsonApiData[Customer] = JsonApiData(inp(0), "users", cust)
       val root: JsonApiRoot[Customer] = JsonApiRoot(data)
       //root.toJson.compactPrint    //

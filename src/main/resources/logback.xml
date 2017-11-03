@@ -19,6 +19,14 @@
         </encoder>
     </appender>
 
+    <appender name="REQUESTS-FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/requests.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <appender name="SUCCESS-FILE" class="ch.qos.logback.core.FileAppender">
         <file>logs/success.log</file>
         <append>true</append>
@@ -35,12 +43,28 @@
         </encoder>
     </appender>
 
+    <appender name="ANALYTICS-FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/analytics.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="requests" additivity="false">
+        <appender-ref ref="REQUESTS-FILE"/>
+    </logger>
+
     <logger name="success" additivity="false">
         <appender-ref ref="SUCCESS-FILE"/>
     </logger>
 
     <logger name="failure" additivity="false">
         <appender-ref ref="FAILURE-FILE"/>
+    </logger>
+
+    <logger name="analytics" additivity="false">
+        <appender-ref ref="ANALYTICS-FILE"/>
     </logger>
 
     <!--<logger name="akka" level="DEBUG" />-->

@@ -17,7 +17,7 @@ import uk.co.britishgas.batch.oam.Marshallers._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /** Batch creator of OAM records.
  * An Akka stream workflow which will process a potentially unbounded source
@@ -39,8 +39,11 @@ import scala.util.Try
 object Client extends App {
 
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
+  private val logrequest: LoggingAdapter  = Logging.getLogger(system, "requests")
   private val logsuccess: LoggingAdapter  = Logging.getLogger(system, "success")
   private val logfailure: LoggingAdapter  = Logging.getLogger(system, "failure")
+  private val loganalytics: LoggingAdapter  = Logging.getLogger(system, "analytics")
+
   private val apiHost: String             = conf("api-host")
   private val apiPath: String             = conf("api-path")
   private val apiPort: Int                = conf("api-port").toInt
@@ -53,15 +56,14 @@ object Client extends App {
   private val file: String                = conf("source-dir") + "/" + conf("source-file")
   private val path: Path                  = Paths.get(file)
 
-  log.info(
-      "\n\nStarting OAM Batch Job. \n" +
-      "Data source: " + file + "\n" +
-      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath + "\n" +
-      "At a rate of: " + throttleRate + " request/sec \n"
-  )
+  val jobId: Int = Random.nextInt(100000000)
 
-  // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
-  private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+  loganalytics.info(
+    s"Starting BF job $jobId \n\n" +
+      "Data source: " + file + "\n" +
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
+      " (at rate: " + throttleRate + " request(s)/sec) \n"
+  )
 
   private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
@@ -99,6 +101,10 @@ object Client extends App {
 
   val sink = Sink.foreach(println)
 
+  // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+  private def extractId(jst: String) = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+
+
   /*
   val graph: Unit = source.
                       via(delimiter).
@@ -134,20 +140,27 @@ object Client extends App {
     HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
   }
 
+
+  // logrequest
+
   val fut: Future[Map[String, HttpResponse]] =
     source.
       via(delimiter).
       via(throttle).
       via(marshaller).
       map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
+      map((tup: (HttpRequest, String)) => {
+        logrequest.info(tup._1.toString())
+        (tup._1, tup._2)
+      }).
       via(connection).
       runFold(Map.empty[String, HttpResponse]) {
 
         // This case drills down into successful Responses to log based on whether we got a HTTP Status code 200 or not
         case (map, (util.Success(resp), ucrn)) => {
           resp.status.intValue match {
-            case 200 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logsuccess.info("Status OK 200 [" + ucrn + "] BODY[" + body.utf8String + "]")
+            case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
+              logsuccess.info("Created 201 [" + ucrn + "] BODY[" + body.utf8String + "]")
             }
             case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
               logfailure.info("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
@@ -161,6 +174,22 @@ object Client extends App {
           map
         }
       }
+
+  fut.onComplete((hr: Try[Map[String, HttpResponse]]) => {
+    val respMap: Map[String, HttpResponse] = hr.get
+    val total: Int = respMap.size
+    val successes: Int = respMap.filter(x => x._2.status.intValue() == 201).size
+    val failures: Int = respMap.filter(x => x._2.status.intValue() != 201).size
+    loganalytics.info {
+      s"Terminating job $jobId \n\n" +
+        s"/------------ Analytics (job $jobId) ------------/\n\n" +
+        " Total elements processed  = " + respMap.size + "\n" +
+        " Successes                 = " + successes + "\n" +
+        " Failures                  = " + failures + "\n" +
+        " Mismatches (Network?)     = " + (total - (successes + failures)) + "  \n"
+    }
+    system.terminate()
+  })
 
 
       //runWith(sink).

@@ -16,7 +16,7 @@ import uk.co.britishgas.batch.oam.Marshallers._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Random, Try}
 
 /** Batch creator of OAM records.
  * An Akka stream workflow which will process a potentially unbounded source
@@ -40,6 +40,8 @@ object BFClient extends App {
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
   private val logsuccess: LoggingAdapter  = Logging.getLogger(system, "success")
   private val logfailure: LoggingAdapter  = Logging.getLogger(system, "failure")
+  private val loganalytics: LoggingAdapter  = Logging.getLogger(system, "analytics")
+
   private val apiHost: String             = conf("bf-api-host")
   private val apiPath: String             = conf("bf-api-path")
   private val apiPort: Int                = conf("bf-api-port").toInt
@@ -50,11 +52,13 @@ object BFClient extends App {
   private val file: String                = conf("bf-source-dir") + "/" + conf("bf-source-file")
   private val path: Path                  = Paths.get(file)
 
-  log.info(
-      "\n\nStarting BF Batch Job. \n" +
+  val jobId: Int = Random.nextInt(100000000)
+
+  loganalytics.info(
+      s"Starting BF job $jobId \n\n" +
       "Data source: " + file + "\n" +
-      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath + "\n" +
-      "At a rate of: " + throttleRate + " request/sec \n"
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
+      " (at rate: " + throttleRate + " request(s)/sec) \n"
   )
 
   // buildJson(in).get.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
@@ -147,6 +151,28 @@ object BFClient extends App {
           map
         }
       }
+
+  fut.onComplete((hr: Try[Map[String, HttpResponse]]) => {
+    val respMap: Map[String, HttpResponse] = hr.get
+    val total: Int = respMap.size
+    val successes: Int = respMap.filter(x => x._2.status.intValue() == 200).size
+    val failures: Int = respMap.filter(x => x._2.status.intValue() != 200).size
+    loganalytics.info {
+      s"Terminating job $jobId \n\n" +
+      s"/------------ Analytics (job $jobId) ------------/\n\n" +
+        " Total elements processed  = " + respMap.size + "\n" +
+        " Successes                 = " + successes + "\n" +
+        " Failures                  = " + failures + "\n" +
+        " Mismatches (Network?)     = " + (total - (successes + failures)) + "  \n"
+    }
+//    println(s"\r\n/------------ Analytics for Job $jobId ------------/\r\n")
+//    println(" Finished run of " + respMap.size + " elements")
+//    println(" Successes  = " + successes)
+//    println(" Failures   = " + failures)
+//    println(" Mismatches = " + (total - (successes + failures)) + " (Network Errors?)")
+//    println("\r\n/------------ Analytics End ------------/\r\n")
+    system.terminate()
+  })
 
 
       //runWith(sink).
