@@ -23,6 +23,8 @@ package object batch {
 
   private val config: Config = ConfigFactory.load()
 
+  print("### batch: " + config.getString("source-dir"))
+
   def conf(s: String): String = config.getString(s)
 
   def printg(s: Any): Unit = println(Console.GREEN + s + Console.RESET)

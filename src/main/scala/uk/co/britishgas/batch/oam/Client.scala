@@ -7,7 +7,7 @@ import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
+import akka.stream.scaladsl.{FileIO, Flow, Framing, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import spray.json._
@@ -35,6 +35,9 @@ import scala.util.{Random, Try}
  * Throttle mode should be "shaping" since this does not throw exceptions in the event of
  * backpressure.
  */
+
+//trait Client
+
 object Client extends App {
 
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
@@ -52,8 +55,8 @@ object Client extends App {
   private val contentType: String         = conf("content-type")
   private val clientId: String            = conf("cid")
   private val backendUsersKey: String     = conf("buk")
-  private val file: String                = conf("source-dir") + "/" + conf("source-file")
-  private val path: Path                  = Paths.get(file)
+   val file: String                = conf("source-dir") + "/" + conf("source-file")
+   val path: Path                  = Paths.get(file)
 
   private val jobId: Int = Random.nextInt(100000000)
 
@@ -64,9 +67,11 @@ object Client extends App {
       " (at rate: " + throttleRate + " request(s)/sec) \n"
   )
 
-  private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
+  /** A file source which emits ByteStrings.
+    */
+  val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
-  /** A Flow of type ByteString => ByteString which splits a stream of ByteStrings into lines.
+  /** A Flow of type ByteString => ByteString which simply splits a stream of ByteStrings into lines.
     */
   private val delimiter: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
@@ -92,6 +97,10 @@ object Client extends App {
       (id, json) // emit the Tuple2[String, String] downstream
     })
 
+  /** A Connection Pool based on a single Host configuration.
+    * All requests/responses go out/in via this pool.
+    * Requests are non-blocking and Responses are handled asynchronously.
+    */
   private val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
