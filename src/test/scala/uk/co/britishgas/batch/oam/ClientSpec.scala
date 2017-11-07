@@ -1,59 +1,53 @@
 package uk.co.britishgas.batch.oam
 
-import akka.NotUsed
-import akka.actor.{ActorRef, ActorSystem}
-import akka.event.{Logging, LoggingAdapter}
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.stream.scaladsl.{FileIO, Flow, Framing, Keep, Sink, Source}
-import akka.stream.{IOResult, ThrottleMode}
-import akka.testkit.{ImplicitSender, TestActors, TestKit}
+import akka.actor.ActorSystem
+import akka.stream.scaladsl.Sink
+import akka.testkit.TestKit
 import akka.util.ByteString
-import com.typesafe.config.{Config, ConfigFactory}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import uk.co.britishgas.batch._
-import uk.co.britishgas.batch.oam._
-import uk.co.britishgas.batch.oam.Client._
 
 import scala.collection.immutable
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.util.Try
 
-class ClientSpec extends TestKit(ActorSystem("ClientSpec")) with ImplicitSender
-  with WordSpecLike with Matchers with BeforeAndAfterAll {
-
+class ClientSpec extends TestKit(ActorSystem("ClientSpec")) with FlatSpecLike with Matchers
+  with Client  with BeforeAndAfterAll {
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)
   }
 
-  "An Echo actor" must {
+  val testSource: String =  "003005400001|Ms|Tera|Patrick|terapatrick@mail.com|BG,SE|active|CRM\n" +
+                    "003005400002|Mr|Harry|Callahan|harrycallahan@mail.com|SE|active|AWB\n" +
+                    "003005400003|Mrs|Cindy|Smith|cindysmith@hotmail.com|BG,SE|active|PPOT3\n"
 
-    "send back messages unchanged" in {
-      val echo: ActorRef = system.actorOf(TestActors.echoActorProps)
-      echo ! "check"
-      expectMsg("check")
-    }
+  val testRecord: String =  "003005400001|Ms|Tera|Patrick|terapatrick@mail.com|BG,SE|active|CRM"
 
+  val future: Future[immutable.Seq[ByteString]] = source.runWith(Sink.seq)
+  val result: immutable.Seq[ByteString] = Await.result(future, 3.seconds)
+  val asutf8: String = {
+      Try { result.fold(ByteString(""))((_: ByteString) ++ (_: ByteString)).decodeString("UTF8") }
+    }.get
+
+  "Reading from an OAM file source" should "return a non-empty Vector of ByteStrings" in {
+    assert(result.isInstanceOf[Vector[ByteString]])
+    assert(result.nonEmpty)
   }
 
-  //val sourceUnderTest = Source.repeat(1).map(_ * 2)
+  it should "represent an expected utf-8 string" in {
+    //val asutf8: String = result.fold(ByteString(""))(_ ++ _).decodeString("UTF8")
+    assert(asutf8 == testSource)
+  }
 
-//  private val config: Config = ConfigFactory.load()
-//
-//  val sourceDir = config.getString("source-dir")
-//
-//  //val sourceDir = ConfigFactory.parseString("source-dir")
-//
-//  println("Sourcedir: " + sourceDir + " and Path: " + Client.file)
-//
-//  val sink = Sink.ignore
-//
-//  val future = source
-//                .take(1)
-//                .map(x => println(x.utf8String))
-//    .toMat(sink)(Keep.right)
+  it should "be delimited by new lines" in {
+    val future: Future[immutable.Seq[ByteString]] = source.via(delimiter).take(1).runWith(Sink.seq)
+    val result: immutable.Seq[ByteString] = Await.result(future, 3.seconds)
+    val asutf8: String = {
+      Try { result.fold(ByteString(""))((_: ByteString) ++ (_: ByteString)).decodeString("UTF8") }
+    }.get
+    assert(asutf8 == testRecord)
+  }
 
-//  val result = Await.result(future, 3.seconds)
-//  assert(result == Seq.fill(10)(2))
 }

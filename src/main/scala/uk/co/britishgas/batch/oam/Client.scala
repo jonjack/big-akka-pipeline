@@ -38,7 +38,7 @@ import scala.util.{Random, Try}
 
 //trait Client
 
-object Client extends App {
+trait Client {
 
   private val log: LoggingAdapter         = Logging.getLogger(system, this)
   private val logrequest: LoggingAdapter  = Logging.getLogger(system, "requests")
@@ -69,11 +69,11 @@ object Client extends App {
 
   /** A file source which emits ByteStrings.
     */
-  val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
+  private[oam] val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   /** A Flow of type ByteString => ByteString which simply splits a stream of ByteStrings into lines.
     */
-  private val delimiter: Flow[ByteString, ByteString, NotUsed] =
+  private[oam] val delimiter: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
   /** A Flow which explicitly creates back pressure on it's upstream source of elements and
