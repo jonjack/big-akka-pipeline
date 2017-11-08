@@ -1,9 +1,9 @@
-package uk.co.britishgas.batch.oam
+package uk.co.britishgas.streams.oam
 
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.json._
-import uk.co.britishgas.batch.oam.Model._
-import uk.co.britishgas.batch.{JsonApiData, JsonApiRoot}
+import uk.co.britishgas.streams.oam.Model._
+import uk.co.britishgas.streams._
 
 class MarshallersSpec extends FlatSpecLike with Matchers {
 
@@ -14,7 +14,7 @@ class MarshallersSpec extends FlatSpecLike with Matchers {
       |"brands":["BG"],"first-name":"Tera","title":"Ms"}""".stripMargin.replaceAll("\n", "")
 
   private val marshalledJsonApiCustomer: String =
-    """{"data":{"id":"003610070499","type":"users","attributes":{"channel":"CRM",
+    """{"data":{"id":"003005400001","type":"users","attributes":{"channel":"CRM",
       |"email":"terapatrick@gmail.com","surname":"Patrick","status":"active",
       |"brands":["BG"],"first-name":"Tera","title":"Ms"}}}""".stripMargin.replaceAll("\n", "")
 
@@ -27,7 +27,7 @@ class MarshallersSpec extends FlatSpecLike with Matchers {
 
   it should "return a valid compact JSON API format string" in {
     val json: JsValue = customer1.toJson
-    val japid: JsonApiData[Customer] = JsonApiData("003610070499", "users", customer1)
+    val japid: JsonApiData[Customer] = JsonApiData("003005400001", "users", customer1)
     val japi: JsonApiRoot[Customer] = JsonApiRoot(japid)
     val japijson: String = japi.toJson.compactPrint
     assert(japijson == marshalledJsonApiCustomer)
@@ -45,7 +45,7 @@ class MarshallersSpec extends FlatSpecLike with Matchers {
 
   private val prettyMarshalledJsonApiCustomer: String = """{""" + "\n" +
     """  "data": {""" + "\n" +
-    """    "id": "003610070495",""" + "\n" +
+    """    "id": "003005400002",""" + "\n" +
     """    "type": "users",""" + "\n" +
     """    "attributes": {""" + "\n" +
     """      "channel": "AWB",""" + "\n" +
@@ -68,7 +68,7 @@ class MarshallersSpec extends FlatSpecLike with Matchers {
 
   it should "return a valid pretty JSON API format" in {
     val json: JsValue = customer2.toJson
-    val japid: JsonApiData[Customer] = JsonApiData("003610070495", "users", customer2)
+    val japid: JsonApiData[Customer] = JsonApiData("003005400002", "users", customer2)
     val japi: JsonApiRoot[Customer] = JsonApiRoot(japid)
     val japijson: String = japi.toJson.prettyPrint
     assert(japijson == prettyMarshalledJsonApiCustomer)

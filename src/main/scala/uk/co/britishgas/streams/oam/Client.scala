@@ -1,4 +1,4 @@
-package uk.co.britishgas.batch.oam
+package uk.co.britishgas.streams.oam
 
 import java.nio.file.{Path, Paths}
 
@@ -11,8 +11,8 @@ import akka.stream.scaladsl.{FileIO, Flow, Framing, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import spray.json._
-import uk.co.britishgas.batch._
-import uk.co.britishgas.batch.oam.Marshallers._
+import uk.co.britishgas.streams._
+import uk.co.britishgas.streams.oam.Marshallers._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -35,77 +35,48 @@ import scala.util.{Random, Try}
  * Throttle mode should be "shaping" since this does not throw exceptions in the event of
  * backpressure.
  */
+object Client extends App {
 
-//trait Client
-
-trait Client {
-
-  private val log: LoggingAdapter         = Logging.getLogger(system, this)
-  private val logRequest: LoggingAdapter  = Logging.getLogger(system, "requests")
-  private val logSuccess: LoggingAdapter  = Logging.getLogger(system, "success")
-  private val logFailure: LoggingAdapter  = Logging.getLogger(system, "failure")
+  private val log: LoggingAdapter           = Logging.getLogger(system, this)
+  private val logRequest: LoggingAdapter    = Logging.getLogger(system, "requests")
+  private val logSuccess: LoggingAdapter    = Logging.getLogger(system, "success")
+  private val logFailure: LoggingAdapter    = Logging.getLogger(system, "failure")
   private val logAnalytics: LoggingAdapter  = Logging.getLogger(system, "analytics")
+  private val apiHost: String               = conf("api-host")
+  private val apiPath: String               = conf("api-path")
+  private val apiPort: Int                  = conf("api-port").toInt
+  private val throttleRate: Int             = conf("throttle-rate").toInt
+  private val throttleBurst: Int            = conf("throttle-burst").toInt
+  private val origin: String                = conf("origin")
+  private val contentType: String           = conf("content-type")
+  private val clientId: String              = conf("cid")
+  private val backendUsersKey: String       = conf("buk")
+  private val file: String                  = conf("source-dir") + "/" + conf("source-file")
+  private val path: Path                    = Paths.get(file)
+  private val jobId: Int                    = Random.nextInt(100000000)
 
-  private val apiHost: String             = conf("api-host")
-  private val apiPath: String             = conf("api-path")
-  private val apiPort: Int                = conf("api-port").toInt
-  private val throttleRate: Int           = conf("throttle-rate").toInt
-  private val throttleBurst: Int          = conf("throttle-burst").toInt
-  private val origin: String              = conf("origin")
-  private val contentType: String         = conf("content-type")
-  private val clientId: String            = conf("cid")
-  private val backendUsersKey: String     = conf("buk")
-   val file: String                = conf("source-dir") + "/" + conf("source-file")
-   val path: Path                  = Paths.get(file)
+  def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
-  private val jobId: Int = Random.nextInt(100000000)
-
-  logAnalytics.info(
-    s"Starting BF job $jobId \n\n" +
-      "Data source: " + file + "\n" +
-      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
-      " (at rate: " + throttleRate + " request(s)/sec) \n"
-  )
-
-  /** A file source which emits ByteStrings.
-    */
-  private[oam] val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
-
-  /** A Flow of type ByteString => ByteString which simply splits a stream of ByteStrings into lines.
-    */
-  private[oam] val delimiter: Flow[ByteString, ByteString, NotUsed] =
+  def delimiter: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
-  /** A Flow which explicitly creates back pressure on it's upstream source of elements and
-    * controls the rate at which elements are emitted downstream in the materialized graph.
-    */
   private val throttle: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping)
 
-  /** A Flow of type ByteString => (String, String) which marshalls a stream of ByteStrings into a
-    * JSON representation. The emitted tuple has a logical type of (Customer ID, Customer JSON).
-    * This flow is designed to emit into a pooled connection which, because responses are not
-    * necessarily in order of request, require some ID to map the Request->Response. In this case,
-    * we use the Customer ID as the mapping in order that any logged failures can be traced back
-    * to the customer record.
-    */
   private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
     map((bs: ByteString) => { buildJson(bs.utf8String) }).
     filter((op: Option[String]) => { op.nonEmpty }).
     map((op: Option[String]) => {
       val json: String = op.get
       val id: String = extractId(json)
-      (id, json) // emit the Tuple2[String, String] downstream
+      (id, json)
     })
 
-  /** A Connection Pool based on a single Host configuration.
-    * All requests/responses go out/in via this pool.
-    * Requests are non-blocking and Responses are handled asynchronously.
-    */
   private val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
-  private def extractId(jst: String): String = jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+  private def extractId(jst: String): String = jst.parseJson.asJsObject.fields("data").
+                                                                asJsObject.fields("id").toString
 
   import akka.http.scaladsl.model.HttpMethods._
   import akka.http.scaladsl.model.HttpProtocols._
@@ -122,7 +93,7 @@ trait Client {
     HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
   }
 
-  val fut: Future[Map[String, HttpResponse]] =
+  val workflow: Future[Map[String, HttpResponse]] =
     source.
       via(delimiter).
       via(throttle).
@@ -150,8 +121,7 @@ trait Client {
         }
       }
 
-  // Map in the future then terminate the Actor system
-  fut.onComplete((hr: Try[Map[String, HttpResponse]]) => {
+  workflow.onComplete((hr: Try[Map[String, HttpResponse]]) => {
     val respMap: Map[String, HttpResponse] = hr.get
     val total: Int = respMap.size
     val successes: Int = respMap.count(x => x._2.status.intValue() == 201)
@@ -166,5 +136,12 @@ trait Client {
     }
     system.terminate()
   })
+
+  logAnalytics.info(
+    s"Starting BF job $jobId \n\n" +
+      "Data source: " + file + "\n" +
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
+      " (at rate: " + throttleRate + " request(s)/sec) \n"
+  )
 
 }
