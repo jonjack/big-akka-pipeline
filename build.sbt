@@ -1,5 +1,5 @@
 
-name := "cargo"
+name := "bg-cargo"
 
 version := "0.1-SNAPSHOT"
 

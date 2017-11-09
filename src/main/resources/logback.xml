@@ -4,22 +4,19 @@
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <encoder>
-            <!--<pattern>%X{akkaTimestamp} %-5level[%thread] %logger{0} - %msg%n</pattern>-->
             <pattern>%X{akkaTimestamp} %logger{0} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="APPLICATION" class="ch.qos.logback.core.FileAppender">
         <file>logs/app.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
-            <!--<pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level[%thread] %logger{1} - %msg%n</pattern>-->
-            <!--<pattern>%d{HH:mm:ss.SSS} | %-5level | %thread | %X{akkaSource} | %logger{1} | %m%n%rEx</pattern>-->
         </encoder>
     </appender>
 
-    <appender name="REQUESTS-FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="REQUESTS" class="ch.qos.logback.core.FileAppender">
         <file>logs/requests.log</file>
         <append>true</append>
         <encoder>
@@ -27,7 +24,7 @@
         </encoder>
     </appender>
 
-    <appender name="SUCCESS-FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="SUCCESS" class="ch.qos.logback.core.FileAppender">
         <file>logs/success.log</file>
         <append>true</append>
         <encoder>
@@ -35,7 +32,7 @@
         </encoder>
     </appender>
 
-    <appender name="FAILURE-FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="FAILURE" class="ch.qos.logback.core.FileAppender">
         <file>logs/failure.log</file>
         <append>true</append>
         <encoder>
@@ -43,7 +40,7 @@
         </encoder>
     </appender>
 
-    <appender name="ANALYTICS-FILE" class="ch.qos.logback.core.FileAppender">
+    <appender name="ANALYTICS" class="ch.qos.logback.core.FileAppender">
         <file>logs/analytics.log</file>
         <append>true</append>
         <encoder>
@@ -52,26 +49,24 @@
     </appender>
 
     <logger name="requests" additivity="false">
-        <appender-ref ref="REQUESTS-FILE"/>
+        <appender-ref ref="REQUESTS"/>
     </logger>
 
     <logger name="success" additivity="false">
-        <appender-ref ref="SUCCESS-FILE"/>
+        <appender-ref ref="SUCCESS"/>
     </logger>
 
     <logger name="failure" additivity="false">
-        <appender-ref ref="FAILURE-FILE"/>
+        <appender-ref ref="FAILURE"/>
     </logger>
 
     <logger name="analytics" additivity="false">
-        <appender-ref ref="ANALYTICS-FILE"/>
+        <appender-ref ref="ANALYTICS"/>
     </logger>
-
-    <!--<logger name="akka" level="DEBUG" />-->
 
     <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="APPLICATION"/>
     </root>
 
 </configuration>

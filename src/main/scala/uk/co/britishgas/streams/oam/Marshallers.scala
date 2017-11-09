@@ -35,7 +35,7 @@ object Marshallers {
     marshalCustomer(in) match {
       case Success(json) => Option(json)
       case Failure(ex) => {
-        logFailure.info(s"JSON Marshalling failed because input[$in] caused: ${ex}")
+        logFailure.error(s"JSON Marshalling failed because input[$in] caused: ${ex}")
         Option(null)
       }
     }

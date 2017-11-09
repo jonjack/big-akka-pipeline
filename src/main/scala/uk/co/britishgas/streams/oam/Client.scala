@@ -111,12 +111,12 @@ object Client extends App {
               logSuccess.info("Created 201 [" + ucrn + "] BODY[" + body.utf8String + "]")
             }
             case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logFailure.info("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
+              logFailure.error("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
             }
           }
           map ++ Map(ucrn -> resp)}
         case (map, (util.Failure(ex), symbol)) => {
-          logFailure.info("Exception " + ex.getMessage)
+          logFailure.error("Exception " + ex.getMessage)
           map
         }
       }
