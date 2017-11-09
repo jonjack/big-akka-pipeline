@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
+    <timestamp key="byMinute" datePattern="ddMMyy-HH:mm"/>
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>
         <encoder>
@@ -9,7 +11,7 @@
     </appender>
 
     <appender name="APPLICATION" class="ch.qos.logback.core.FileAppender">
-        <file>logs/app.log</file>
+        <file>logs/application-${byMinute}.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -17,7 +19,7 @@
     </appender>
 
     <appender name="REQUESTS" class="ch.qos.logback.core.FileAppender">
-        <file>logs/requests.log</file>
+        <file>logs/requests-${byMinute}.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -25,7 +27,7 @@
     </appender>
 
     <appender name="SUCCESS" class="ch.qos.logback.core.FileAppender">
-        <file>logs/success.log</file>
+        <file>logs/success-${byMinute}.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -33,7 +35,7 @@
     </appender>
 
     <appender name="FAILURE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/failure.log</file>
+        <file>logs/failure-${byMinute}.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -41,7 +43,7 @@
     </appender>
 
     <appender name="ANALYTICS" class="ch.qos.logback.core.FileAppender">
-        <file>logs/analytics.log</file>
+        <file>logs/analytics-${byMinute}.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
