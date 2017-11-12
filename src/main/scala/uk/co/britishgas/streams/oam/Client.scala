@@ -51,9 +51,13 @@ object Client extends App {
   private val contentType: String           = conf("content-type")
   private val clientId: String              = conf("cid")
   private val backendUsersKey: String       = conf("buk")
-  private val file: String                  = conf("source-dir") + "/" + conf("source-file")
-  private val path: Path                    = Paths.get(file)
+  private val sourceDir: String             = conf("source-dir")
+  private val dirPath: String               = if(sourceDir.trim.endsWith("/")) sourceDir else sourceDir + "/"
+  private val filePath: String              = dirPath + conf("source-file")
+  private val path: Path                    = Paths.get(filePath)
   private val jobId: Int                    = Random.nextInt(100000000)
+
+  println("### FILE PATH: " + filePath)
 
   def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
@@ -64,8 +68,8 @@ object Client extends App {
     Flow[ByteString].throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping)
 
   private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
-    map((bs: ByteString) => { buildJson(bs.utf8String) }).
-    filter((op: Option[String]) => { op.nonEmpty }).
+    map((bs: ByteString) => buildJson(bs.utf8String)).
+    filter((op: Option[String]) => op.nonEmpty).
     map((op: Option[String]) => {
       val json: String = op.get
       val id: String = extractId(json)
@@ -139,7 +143,7 @@ object Client extends App {
 
   logAnalytics.info(
     s"Starting BF job $jobId \n\n" +
-      "Data source: " + file + "\n" +
+      "Data source: " + filePath + "\n" +
       "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
       " (at rate: " + throttleRate + " request(s)/sec) \n"
   )
