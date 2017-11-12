@@ -1,9 +1,9 @@
 
 name := "bg-cargo"
 
-version := "0.1-SNAPSHOT"
+version := "0.3"
 
-scalaVersion := "2.12.3"
+scalaVersion := "2.12.4"
 
 libraryDependencies ++= {
   lazy val akkaVersion        = "2.5.6"
