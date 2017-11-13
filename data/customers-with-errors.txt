@@ -1,0 +1,10 @@
+003005400527|Ms|Latha|Malyala|latha.malyala@centrica.com|BG|active|PPOT3
+|No|Customer|ID|customer@centrica.com|BG|active|PPOT3
+003005400528|Mr|Jonathan|Jackson|jonathan.jackson@centrica.com|BG,SE|active|PPOT3
+
+003005400528|Mr|Jonathan|Jackson|jonathan.jackson@centrica.com|BG,SE|active|PPOT3
+003006540129|Mr|Too|MANY|BRANDS|BG,SE,SE|active|PPOT3
+003006540130|Ms|LOWERCASE|BRAND|FAILS|bg|active|PPOT3
+|THIS|ONE|HAS|LOTS||WRONG
+|Ms|Jane|Error||||
+003005400529|Mr|Aravindhan|Radhakrishnan|aravindhan.radhakrishnan1@britishgas.co.uk|SE|active|PPOT3
