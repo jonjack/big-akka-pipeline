@@ -57,8 +57,6 @@ object Client extends App {
   private val path: Path                    = Paths.get(filePath)
   private val jobId: Int                    = Random.nextInt(100000000)
 
-  println("### FILE PATH: " + filePath)
-
   def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   def delimiter: Flow[ByteString, ByteString, NotUsed] =
