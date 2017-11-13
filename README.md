@@ -56,7 +56,34 @@ Check the permissions of unpacked application. The user you run the application 
 
 ## Configuration
 
-The configuration is located at `src/main/resources/application.conf`
+The default configuration is located at `src/main/resources/application.conf` and is packaged within the application Jar file when building/deploying a binary distribution.
+
+The default configuration can be overridden by specifying an external configuration source as a system property at runtime.
+
+```bash
+bin/bg-cargo -Dconfig.file=./configuration.conf
+```
+
+An example configuration file for the OAM client configuration is provided in the root of the project (`configuration.conf`) and looks like this. Note that the `include "application"` statement imports the default configuration packaged within the application Jar, and is necessary if you are only overriding a subset of properties (which will always likely be the case). You need to either copy this example configuration file to your remote host or create your own.
+
+```scala
+include "application"
+
+# Override default OAM Client Configuration
+# -----------------------------------------
+
+# source-dir=/path/to/source/directory
+# source-file=datasource.txt
+
+# api-host=digital1.3utilities.com
+# api-port=443
+
+# cid=4d85090c-8b6d-4cba-9327-c024643be989
+# buk=ABC
+
+# throttle-rate=1
+# throttle-burst=1
+```
 
 For the OAM Client, the following keys will need checking/amending depending on the execution environment.
 
@@ -73,15 +100,17 @@ For the OAM Client, the following keys will need checking/amending depending on 
 | buk | _Back-End-Users-Key_ - A security header which is specific to the `/users` API. Will depend on target environment. |
 
 
-#### A note of testing environment certificates
-
-TBC...
-
 
 ## Running
 
+An unpacked distribution will include a startup script which sets the classpath to the dependant libraries and invokes the entrypoint to the application. Running the application is as straightforward as invoking this startup script.
 
+```bash
+bin/bg-cargo
 
+// or if using an external configuration file to override some default configuration values
+bin/bg-cargo -Dconfig.file=/path/to/external/configuration/file
+```
 
 
 ## Logs
