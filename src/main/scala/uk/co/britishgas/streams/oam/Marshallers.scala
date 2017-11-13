@@ -11,6 +11,8 @@ object Marshallers {
 
   private val logFailure: LoggingAdapter = Logging.getLogger(system, "failure")
 
+  case class InvalidInputException(message: String) extends Exception(message)
+
   object CustomerJsonProtocol {
     import DefaultJsonProtocol._
     implicit val printer: PrettyPrinter.type = PrettyPrinter
@@ -19,13 +21,49 @@ object Marshallers {
     implicit val rootFormat: RootJsonFormat[JsonApiRoot[Customer]] = jsonFormat1(JsonApiRoot[Customer])
   }
 
+  // Array  0      1     2       3                4                   5      6     7
+  // 003005400528|Mr|Jonathan|Jackson|jonathan.jackson@centrica.com|BG,SE|active|PPOT3
+  // UCRN - not empty
+  // Title - not empty
+  // Name - not empty
+  // Surname - not empty
+  // Email not -empty
+  // Brands not empty Array - not longr than 2 - to uppercase
+  // active - not empty - to lowercase
+  // channel - can be empty
+
+  private def checkInputArray(arr: Array[String]): Boolean =
+    if(arr.length >= 7) true
+    else throw InvalidInputException("Input array was below mandatory length (>= 7 fields)")
+
+  private def extractToken(token: String, id: String): String =
+    if(token.trim.nonEmpty) token
+    else throw InvalidInputException(s"$id was empty")
+
+  private def extractBrands(bds: String): Set[String] = {
+    val rawBrands: String = extractToken(bds, "brands")
+    val brands: Array[String] = rawBrands.trim.split(",").map((token: String) => token.trim.toUpperCase).
+      filter((br: String) => br.equals("BG") || br.equals("SE"))
+    if(brands.nonEmpty) brands.toSet
+    else throw InvalidInputException("No valid brand(s) supplied.")
+  }
+
   private def marshalCustomer(in: String): Try[String] = {
     import CustomerJsonProtocol._
     Try {
-      val inp: Array[String] = in.trim.split("\\|")
-      val brands: Set[String] = inp(5).trim.split(",").toSet
-      val cust: Customer = Customer(inp(1), inp(2), inp(3), inp(4), brands, inp(6), inp(7))
-      val data: JsonApiData[Customer] = JsonApiData(inp(0), "users", cust)
+      //return Failure(InvalidInputException("### ITS ALL BOLLOCKS!"))
+      val input: Array[String] = in.trim.split("\\|")
+      checkInputArray(input)
+      val ucrn: String = extractToken(input(0), "ucrn")
+      val title: String = extractToken(input(1), "title")
+      val firstname: String = extractToken(input(2), "firstname")
+      val surname: String = extractToken(input(3), "surname")
+      val email: String = extractToken(input(4), "email")
+      val brands: Set[String] = extractBrands(input(5))
+      val status: String = extractToken(input(6), "status")
+      val channel: String = extractToken(input(7), "channel")
+      val cust: Customer = Customer(title, firstname, surname, email, brands, status, channel)
+      val data: JsonApiData[Customer] = JsonApiData(ucrn, "users", cust)
       val root: JsonApiRoot[Customer] = JsonApiRoot(data)
       root.toJson.compactPrint
     }
