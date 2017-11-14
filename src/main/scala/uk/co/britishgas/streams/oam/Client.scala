@@ -2,12 +2,12 @@ package uk.co.britishgas.streams.oam
 
 import java.nio.file.{Path, Paths}
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
-import akka.stream.scaladsl.{FileIO, Flow, Framing, Source}
+import akka.stream.scaladsl.{FileIO, Flow, Framing, Keep, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
 import spray.json._
@@ -57,6 +57,13 @@ object Client extends App {
   private val path: Path                    = Paths.get(filePath)
   private val jobId: Int                    = Random.nextInt(100000000)
 
+  logAnalytics.info(
+    s"Starting BF job $jobId \n\n" +
+      "Data source: " + filePath + "\n" +
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
+      " (at rate: " + throttleRate + " request(s)/sec) \n"
+  )
+
   def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
 
   def delimiter: Flow[ByteString, ByteString, NotUsed] =
@@ -77,8 +84,18 @@ object Client extends App {
   private val connection: Flow[(HttpRequest, String), (Try[HttpResponse], String), Http.HostConnectionPool] =
     Http().cachedHostConnectionPoolHttps[String](apiHost, apiPort)
 
-  private def extractId(jst: String): String = jst.parseJson.asJsObject.fields("data").
-                                                                asJsObject.fields("id").toString
+  private def extractId(jst: String): String =
+    jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
+
+  val logFlow: Flow[(Try[HttpResponse], String), (Try[HttpResponse], String), NotUsed] =
+    Flow[(Try[HttpResponse], String)]
+      .map(i => {
+        i match {
+          case (util.Success(resp), ucrn) => logSuccess.info("### RESP" + resp + " UCRN: " + ucrn)
+          case (util.Failure(ex), ucrn) => logFailure.info("### EX" + ex + " UCRN: " + ucrn)
+        }
+          i
+      })
 
   import akka.http.scaladsl.model.HttpMethods._
   import akka.http.scaladsl.model.HttpProtocols._
@@ -95,6 +112,20 @@ object Client extends App {
     HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
   }
 
+//  val realTimeWorkflow: Unit =
+//    source.
+//      via(delimiter).
+//      via(throttle).
+//      via(marshaller).
+//      map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
+//      map((tup: (HttpRequest, String)) => {
+//        logRequest.info(tup._1.toString())
+//        (tup._1, tup._2)
+//      }).
+//      via(connection).
+//      via(logFlow).
+//      runWith(Sink.ignore).onComplete((x: Try[Done]) => system.terminate())
+
   val workflow: Future[Map[String, HttpResponse]] =
     source.
       via(delimiter).
@@ -106,6 +137,9 @@ object Client extends App {
         (tup._1, tup._2)
       }).
       via(connection).
+      // This folds over the complete Map which means that everything inside it is done in the future,
+      // even the logging. If we want to write results in realtime then we need to use something
+      // like the realTimeWorkflow
       runFold(Map.empty[String, HttpResponse]) {
         case (map, (util.Success(resp), ucrn)) => {
           resp.status.intValue match {
@@ -138,12 +172,5 @@ object Client extends App {
     }
     system.terminate()
   })
-
-  logAnalytics.info(
-    s"Starting BF job $jobId \n\n" +
-      "Data source: " + filePath + "\n" +
-      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
-      " (at rate: " + throttleRate + " request(s)/sec) \n"
-  )
 
 }
