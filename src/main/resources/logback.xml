@@ -45,6 +45,15 @@
         </encoder>
     </appender>
 
+    <appender name="EXCEPTION" class="ch.qos.logback.core.FileAppender">
+        <!--<file>logs/failure-${byMinute}.log</file>-->
+        <file>logs/exception.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <appender name="ANALYTICS" class="ch.qos.logback.core.FileAppender">
         <!--<file>logs/analytics-${byMinute}.log</file>-->
         <file>logs/analytics.log</file>
@@ -64,6 +73,10 @@
 
     <logger name="failure" additivity="false">
         <appender-ref ref="FAILURE"/>
+    </logger>
+
+    <logger name="exception" additivity="false">
+        <appender-ref ref="EXCEPTION"/>
     </logger>
 
     <logger name="analytics" additivity="false">
