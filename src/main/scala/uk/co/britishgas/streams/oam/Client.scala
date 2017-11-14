@@ -2,38 +2,29 @@ package uk.co.britishgas.streams.oam
 
 import java.nio.file.{Path, Paths}
 
+import java.time.Instant
+
 import akka.{Done, NotUsed}
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.scaladsl.{FileIO, Flow, Framing, Keep, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
+
 import spray.json._
-import uk.co.britishgas.streams._
-import uk.co.britishgas.streams.oam.Marshallers._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
+
+import uk.co.britishgas.streams._
 
 /** Batch creator of OAM records.
  * An Akka stream workflow which will process a potentially unbounded source
  * of "customer" elements and create an OAM record for each by consuming an
  * API - specifically making HTTP POST Requests on /users.
  * On completion, this client generates two logs - Success and Failure.
- *
- * A note on throttling
- * --------------------
- * The flow incorporates a throttle to control the rate at which the stream of elements
- * is emitted through the flow, otherwise we will overwhelm the API with too many requests
- * which will likely result in failures.
- * rate = elements / per sec
- * throttle(elements: Int, per: FiniteDuration, maximumBurst: Int, mode: ThrottleMode)
- * burst is set to rate - this could be increased if performance issues are encountered.
- * Throttle mode should be "shaping" since this does not throw exceptions in the event of
- * backpressure.
  */
 object Client extends App {
 
@@ -41,12 +32,13 @@ object Client extends App {
   private val logRequest: LoggingAdapter    = Logging.getLogger(system, "requests")
   private val logSuccess: LoggingAdapter    = Logging.getLogger(system, "success")
   private val logFailure: LoggingAdapter    = Logging.getLogger(system, "failure")
+  private val logException: LoggingAdapter  = Logging.getLogger(system, "exception")
   private val logAnalytics: LoggingAdapter  = Logging.getLogger(system, "analytics")
   private val apiHost: String               = conf("api-host")
   private val apiPath: String               = conf("api-path")
   private val apiPort: Int                  = conf("api-port").toInt
-  private val throttleRange: Int            = conf("throttle-range").toInt
-  private val throttleFrame: Int            = conf("throttle-frame").toInt
+  private val throttleElements: Int         = conf("throttle-elements").toInt
+  private val throttlePer: Int              = conf("throttle-per").toInt
   private val throttleBurst: Int            = conf("throttle-burst").toInt
   private val origin: String                = conf("origin")
   private val contentType: String           = conf("content-type")
@@ -62,16 +54,43 @@ object Client extends App {
     s"Starting BF job $jobId \n\n" +
       "Data source: " + filePath + "\n" +
       "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
-      " (at rate: " + throttleRange + " request(s) / " + throttleFrame + " sec(s)) \n"
+      " (at rate: " + throttleElements + " request(s) / " + throttlePer + " sec(s)) \n"
   )
 
-  def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
+  import akka.http.scaladsl.model.HttpMethods._
+  import akka.http.scaladsl.model.HttpProtocols._
+  import akka.http.scaladsl.model.MediaTypes._
+  import akka.http.scaladsl.model.{HttpRequest, _}
 
-  def delimiter: Flow[ByteString, ByteString, NotUsed] =
+  private val org = headers.Origin(origin)
+  private val cid = RawHeader("X-Client-ID", clientId)
+  private val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
+  private val hds = List(org, cid, buk)
+
+  private def buildRequest(body: String): HttpRequest = {
+    val entity = HttpEntity(`application/vnd.api+json`, body)
+    HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
+  }
+
+  private def buildJson(in: String): Option[String] = {
+    import Marshallers._
+    marshalCustomer(in) match {
+      case Success(json) => Option(json)
+      case Failure(ex) => {
+        exceptions += 1
+        logException.error(s"JSON Marshalling failed because input[$in] caused: ${ex}")
+        Option(null)
+      }
+    }
+  }
+
+  private val source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
+
+  private val delimiter: Flow[ByteString, ByteString, NotUsed] =
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
   private val throttle: Flow[ByteString, ByteString, NotUsed] =
-    Flow[ByteString].throttle(throttleRange, throttleFrame.second, throttleBurst, ThrottleMode.shaping)
+    Flow[ByteString].throttle(throttleElements, throttlePer.second, throttleBurst, ThrottleMode.shaping)
 
   private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
     map((bs: ByteString) => buildJson(bs.utf8String)).
@@ -98,25 +117,52 @@ object Client extends App {
           i
       })
 
-  import akka.http.scaladsl.model.HttpMethods._
-  import akka.http.scaladsl.model.HttpProtocols._
-  import akka.http.scaladsl.model.MediaTypes._
-  import akka.http.scaladsl.model.{HttpRequest, _}
+//  private val sink = Sink.reduce((Try[HttpResponse], String)) {
+//    case (out, (util.Success(resp), ucrn)) => resp
+//  }
 
-  private val org = headers.Origin(origin)
-  private val cid = RawHeader("X-Client-ID", clientId)
-  private val buk = RawHeader("X-Backend-Users-Key", backendUsersKey)
-  private val hds = List(org, cid, buk)
+//  val reduceSink = Sink.reduce[(Try[HttpResponse], String)](_ => {
+//    case (map, (util.Success(resp), ucrn)) =>
+//  })
 
-  private def buildRequest(body: String): HttpRequest = {
-    val entity = HttpEntity(`application/vnd.api+json`, body)
-    HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
-  }
+  //var elements, successes, failures, exceptions = 0
+  var elements = 0    // number of input elements for job (includes any invalid input records)
+  var successes = 0   // successful 201 responses
+  var failures = 0    // unsuccessful (non-201) responses
+  var exceptions = 0  // exceptions - marshalling errors and failed requests
+
+  // Only elements that entered the Connection will reach the Sink
+  // ie. elements that failed marshalling will not have got this far.
+  val sink: Sink[(Try[HttpResponse], String), Future[Done]] = Sink.foreach[(Try[HttpResponse], String)]({
+    case (util.Success(resp), ucrn) =>
+      resp.status.intValue match {
+        case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { (body: ByteString) =>
+          successes += 1
+          logSuccess.info("Created 201 for UCRN: " + ucrn + " Payload " + body.utf8String)
+
+        }
+        case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { (body: ByteString) =>
+          failures += 1
+          logFailure.error(status + " for UCRN: " + ucrn + " Payload " + body.utf8String)
+        }
+      }
+    case (util.Failure(ex), ucrn) => {
+      exceptions += 1
+      logException.error("for UCRN " + ucrn + " Problem: " + ex.getMessage)
+    }
+//    case (util.Success(resp), ucrn) if resp.status.intValue() == 201 => successes += 1
+//    case (util.Success(resp), ucrn) if resp.status.intValue() != 201 => failures += 1
+//    case (util.Failure(ex), ucrn) => exceptions += 1
+//    case (util.Success(resp), ucrn) if resp.status.intValue() == 201 => (ucrn, resp.status) :: successes
+//    case (util.Success(resp), ucrn) if resp.status.intValue() != 201 => (ucrn, resp.status) :: successes
+//    case (util.Failure(ex), ucrn) => (ucrn, ex) :: failures
+  })
 
   val realTimeWorkflow: Unit =
     source.
       via(delimiter).
       via(throttle).
+      map((bs: ByteString) => { elements += 1; bs }).
       via(marshaller).
       map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
       map((tup: (HttpRequest, String)) => {
@@ -124,8 +170,28 @@ object Client extends App {
         (tup._1, tup._2)
       }).
       via(connection).
-      via(logFlow).
-      runWith(Sink.ignore).onComplete((x: Try[Done]) => system.terminate())
+      //via(logFlow).
+      runWith(sink).onComplete((x: Try[Done]) => {
+        analytics()
+        system.terminate()
+    })
+
+  def analytics(): Unit = {
+    Thread.sleep(1000) // ensure all analytics are captured before we try and access them.
+    logAnalytics.info {
+      s"\n\n Terminating job $jobId at ${Instant.ofEpochMilli(System.currentTimeMillis())} \n" +
+        s" Writing Analytics ...... \n\n" +
+        s" Total elements processed  = $elements \n" +
+        s" ---------------------------------------------------------------- \n" +
+        s" Successes                 = $successes \n" +
+        s" Failures                  = $failures \n" +
+        s" Exceptions                = $exceptions \n" +
+        s" ---------------------------------------------------------------- \n" +
+        s" Total elements reported   = ${successes + failures + exceptions} \n" +
+        s" ---------------------------------------------------------------- \n" +
+        s" Mismatches ???            = ${elements - (successes + failures + exceptions)} \n "
+    }
+  }
 
 //  val workflow: Future[Map[String, HttpResponse]] =
 //    source.

@@ -9,7 +9,7 @@ import scala.util.{Failure, Success, Try}
 
 object Marshallers {
 
-  private val logFailure: LoggingAdapter = Logging.getLogger(system, "failure")
+  private val logException: LoggingAdapter  = Logging.getLogger(system, "exception")
 
   case class InvalidInputException(message: String) extends Exception(message)
 
@@ -37,7 +37,7 @@ object Marshallers {
     else throw InvalidInputException("No valid brand(s) supplied.")
   }
 
-  private def marshalCustomer(in: String): Try[String] = {
+  def marshalCustomer(in: String): Try[String] = {
     import CustomerJsonProtocol._
     Try {
       val input: Array[String] = in.trim.split("\\|")
@@ -54,16 +54,6 @@ object Marshallers {
       val data: JsonApiData[Customer] = JsonApiData(ucrn, "users", cust)
       val root: JsonApiRoot[Customer] = JsonApiRoot(data)
       root.toJson.compactPrint
-    }
-  }
-
-  def buildJson(in: String): Option[String] = {
-    marshalCustomer(in) match {
-      case Success(json) => Option(json)
-      case Failure(ex) => {
-        logFailure.error(s"JSON Marshalling failed because input[$in] caused: ${ex}")
-        Option(null)
-      }
     }
   }
 
