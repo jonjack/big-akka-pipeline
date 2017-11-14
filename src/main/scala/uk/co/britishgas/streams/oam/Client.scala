@@ -45,7 +45,8 @@ object Client extends App {
   private val apiHost: String               = conf("api-host")
   private val apiPath: String               = conf("api-path")
   private val apiPort: Int                  = conf("api-port").toInt
-  private val throttleRate: Int             = conf("throttle-rate").toInt
+  private val throttleRange: Int            = conf("throttle-range").toInt
+  private val throttleFrame: Int            = conf("throttle-frame").toInt
   private val throttleBurst: Int            = conf("throttle-burst").toInt
   private val origin: String                = conf("origin")
   private val contentType: String           = conf("content-type")
@@ -61,7 +62,7 @@ object Client extends App {
     s"Starting BF job $jobId \n\n" +
       "Data source: " + filePath + "\n" +
       "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
-      " (at rate: " + throttleRate + " request(s)/sec) \n"
+      " (at rate: " + throttleRange + " request(s) / " + throttleFrame + " sec(s)) \n"
   )
 
   def source: Source[ByteString, Future[IOResult]] = FileIO.fromPath(path)
@@ -70,7 +71,7 @@ object Client extends App {
     Flow[ByteString].via(Framing.delimiter(ByteString(System.lineSeparator), 10000))
 
   private val throttle: Flow[ByteString, ByteString, NotUsed] =
-    Flow[ByteString].throttle(throttleRate, 1.second, throttleBurst, ThrottleMode.shaping)
+    Flow[ByteString].throttle(throttleRange, throttleFrame.second, throttleBurst, ThrottleMode.shaping)
 
   private val marshaller: Flow[ByteString, (String, String), NotUsed] = Flow[ByteString].
     map((bs: ByteString) => buildJson(bs.utf8String)).
@@ -112,21 +113,7 @@ object Client extends App {
     HttpRequest(POST, apiPath, hds, entity, `HTTP/1.1`)
   }
 
-//  val realTimeWorkflow: Unit =
-//    source.
-//      via(delimiter).
-//      via(throttle).
-//      via(marshaller).
-//      map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
-//      map((tup: (HttpRequest, String)) => {
-//        logRequest.info(tup._1.toString())
-//        (tup._1, tup._2)
-//      }).
-//      via(connection).
-//      via(logFlow).
-//      runWith(Sink.ignore).onComplete((x: Try[Done]) => system.terminate())
-
-  val workflow: Future[Map[String, HttpResponse]] =
+  val realTimeWorkflow: Unit =
     source.
       via(delimiter).
       via(throttle).
@@ -137,40 +124,54 @@ object Client extends App {
         (tup._1, tup._2)
       }).
       via(connection).
-      // This folds over the complete Map which means that everything inside it is done in the future,
-      // even the logging. If we want to write results in realtime then we need to use something
-      // like the realTimeWorkflow
-      runFold(Map.empty[String, HttpResponse]) {
-        case (map, (util.Success(resp), ucrn)) => {
-          resp.status.intValue match {
-            case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logSuccess.info("Created 201 [" + ucrn + "] BODY[" + body.utf8String + "]")
-            }
-            case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-              logFailure.error("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
-            }
-          }
-          map ++ Map(ucrn -> resp)}
-        case (map, (util.Failure(ex), symbol)) => {
-          logFailure.error("Exception " + ex.getMessage)
-          map
-        }
-      }
+      via(logFlow).
+      runWith(Sink.ignore).onComplete((x: Try[Done]) => system.terminate())
 
-  workflow.onComplete((hr: Try[Map[String, HttpResponse]]) => {
-    val respMap: Map[String, HttpResponse] = hr.get
-    val total: Int = respMap.size
-    val successes: Int = respMap.count(x => x._2.status.intValue() == 201)
-    val failures: Int = respMap.count(x => x._2.status.intValue() != 201)
-    logAnalytics.info {
-      s"Terminating job $jobId \n\n" +
-        s"/------------ Analytics (job $jobId) ------------/\n\n" +
-        " Total elements processed  = " + respMap.size + "\n" +
-        " Successes                 = " + successes + "\n" +
-        " Failures                  = " + failures + "\n" +
-        " Mismatches (Network?)     = " + (total - (successes + failures)) + "  \n"
-    }
-    system.terminate()
-  })
+//  val workflow: Future[Map[String, HttpResponse]] =
+//    source.
+//      via(delimiter).
+//      via(throttle).
+//      via(marshaller).
+//      map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
+//      map((tup: (HttpRequest, String)) => {
+//        logRequest.info(tup._1.toString())
+//        (tup._1, tup._2)
+//      }).
+//      via(connection).
+//      // This folds over the complete Map which means that everything inside it is done in the future,
+//      // even the logging. If we want to write results in realtime then we need to use something
+//      // like the realTimeWorkflow
+//      runFold(Map.empty[String, HttpResponse]) {
+//        case (map, (util.Success(resp), ucrn)) => {
+//          resp.status.intValue match {
+//            case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
+//              logSuccess.info("Created 201 [" + ucrn + "] BODY[" + body.utf8String + "]")
+//            }
+//            case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
+//              logFailure.error("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
+//            }
+//          }
+//          map ++ Map(ucrn -> resp)}
+//        case (map, (util.Failure(ex), symbol)) => {
+//          logFailure.error("Exception " + ex.getMessage)
+//          map
+//        }
+//      }
+//
+//  workflow.onComplete((hr: Try[Map[String, HttpResponse]]) => {
+//    val respMap: Map[String, HttpResponse] = hr.get
+//    val total: Int = respMap.size
+//    val successes: Int = respMap.count(x => x._2.status.intValue() == 201)
+//    val failures: Int = respMap.count(x => x._2.status.intValue() != 201)
+//    logAnalytics.info {
+//      s"Terminating job $jobId \n\n" +
+//        s"/------------ Analytics (job $jobId) ------------/\n\n" +
+//        " Total elements processed  = " + respMap.size + "\n" +
+//        " Successes                 = " + successes + "\n" +
+//        " Failures                  = " + failures + "\n" +
+//        " Mismatches (Network?)     = " + (total - (successes + failures)) + "  \n"
+//    }
+//    system.terminate()
+//  })
 
 }
