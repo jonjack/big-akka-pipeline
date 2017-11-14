@@ -81,7 +81,8 @@ include "application"
 # cid=4d85090c-8b6d-4cba-9327-c024643be989
 # buk=ABC
 
-# throttle-rate=1
+# throttle-elements=1
+# throttle-per=1
 # throttle-burst=1
 ```
 
@@ -100,6 +101,26 @@ For the OAM Client, the following keys will need checking/amending depending on 
 | buk | _Back-End-Users-Key_ - A security header which is specific to the `/users` API. Will depend on target environment. |
 
 
+#### A note on Throttling
+
+The flow incorporates a throttle to control the rate at which the stream of elements is emitted through the flow, otherwise we will overwhelm the API with too many requests which will likely result in failures. The `throttle` provided by Akka streams is highly configurable.
+
+```scala
+throttle(elements: Int, per: FiniteDuration, maximumBurst: Int, mode: ThrottleMode)
+```
+
+- `elements` - the number of elements that can enter the throttle's token bucket per `FiniteDuration`.  
+- `per` - the timeframe in which the number of `elements` can enter the throttle's token bucket.
+- `burst` - the number of elements that can be emmitted downstream in a _burst_. If you do not want elements emiiteed downstream faster than `elements / sec` then set `burst` to be the same as `elements`.
+- `mode` - manages behaviour when upstream is faster than throttle rate. This should be "shaping" since this does not throw exceptions in the event of backpressure. This is not configurable.
+
+The default configuration (below) can be overridden at runtime using external configuration (see [Running](#running) below).
+
+```scala
+throttle-elements=1
+throttle-per=1
+throttle-burst=1
+```
 
 ## Running
 
