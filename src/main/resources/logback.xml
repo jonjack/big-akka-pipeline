@@ -27,27 +27,27 @@
         </encoder>
     </appender>
 
-    <appender name="SUCCESS" class="ch.qos.logback.core.FileAppender">
+    <appender name="SUCCESSES" class="ch.qos.logback.core.FileAppender">
         <!--<file>logs/success-${byMinute}.log</file>-->
-        <file>logs/success.log</file>
+        <file>logs/successes.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <appender name="FAILURE" class="ch.qos.logback.core.FileAppender">
+    <appender name="FAILURES" class="ch.qos.logback.core.FileAppender">
         <!--<file>logs/failure-${byMinute}.log</file>-->
-        <file>logs/failure.log</file>
+        <file>logs/failures.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <appender name="EXCEPTION" class="ch.qos.logback.core.FileAppender">
+    <appender name="EXCEPTIONS" class="ch.qos.logback.core.FileAppender">
         <!--<file>logs/failure-${byMinute}.log</file>-->
-        <file>logs/exception.log</file>
+        <file>logs/exceptions.log</file>
         <append>true</append>
         <encoder>
             <pattern>%date{yyyy-MM-dd} %X{akkaTimestamp} %-5level %logger{1} - %msg%n</pattern>
@@ -67,16 +67,16 @@
         <appender-ref ref="REQUESTS"/>
     </logger>
 
-    <logger name="success" additivity="false">
-        <appender-ref ref="SUCCESS"/>
+    <logger name="successes" additivity="false">
+        <appender-ref ref="SUCCESSES"/>
     </logger>
 
-    <logger name="failure" additivity="false">
-        <appender-ref ref="FAILURE"/>
+    <logger name="failures" additivity="false">
+        <appender-ref ref="FAILURES"/>
     </logger>
 
-    <logger name="exception" additivity="false">
-        <appender-ref ref="EXCEPTION"/>
+    <logger name="exceptions" additivity="false">
+        <appender-ref ref="EXCEPTIONS"/>
     </logger>
 
     <logger name="analytics" additivity="false">

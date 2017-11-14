@@ -30,9 +30,9 @@ object Client extends App {
 
   private val log: LoggingAdapter           = Logging.getLogger(system, this)
   private val logRequest: LoggingAdapter    = Logging.getLogger(system, "requests")
-  private val logSuccess: LoggingAdapter    = Logging.getLogger(system, "success")
-  private val logFailure: LoggingAdapter    = Logging.getLogger(system, "failure")
-  private val logException: LoggingAdapter  = Logging.getLogger(system, "exception")
+  private val logSuccess: LoggingAdapter    = Logging.getLogger(system, "successes")
+  private val logFailure: LoggingAdapter    = Logging.getLogger(system, "failures")
+  private val logException: LoggingAdapter  = Logging.getLogger(system, "exceptions")
   private val logAnalytics: LoggingAdapter  = Logging.getLogger(system, "analytics")
   private val apiHost: String               = conf("api-host")
   private val apiPath: String               = conf("api-path")

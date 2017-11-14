@@ -9,8 +9,6 @@ import scala.util.{Failure, Success, Try}
 
 object Marshallers {
 
-  private val logException: LoggingAdapter  = Logging.getLogger(system, "exception")
-
   case class InvalidInputException(message: String) extends Exception(message)
 
   object CustomerJsonProtocol {
