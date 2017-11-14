@@ -50,13 +50,6 @@ object Client extends App {
   private val path: Path                    = Paths.get(filePath)
   private val jobId: Int                    = Random.nextInt(100000000)
 
-  logAnalytics.info(
-    s"Starting BF job $jobId \n\n" +
-      "Data source: " + filePath + "\n" +
-      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
-      " (at rate: " + throttleElements + " request(s) / " + throttlePer + " sec(s)) \n"
-  )
-
   import akka.http.scaladsl.model.HttpMethods._
   import akka.http.scaladsl.model.HttpProtocols._
   import akka.http.scaladsl.model.MediaTypes._
@@ -107,32 +100,8 @@ object Client extends App {
   private def extractId(jst: String): String =
     jst.parseJson.asJsObject.fields("data").asJsObject.fields("id").toString
 
-  val logFlow: Flow[(Try[HttpResponse], String), (Try[HttpResponse], String), NotUsed] =
-    Flow[(Try[HttpResponse], String)]
-      .map(i => {
-        i match {
-          case (util.Success(resp), ucrn) => logSuccess.info("### RESP" + resp + " UCRN: " + ucrn)
-          case (util.Failure(ex), ucrn) => logFailure.info("### EX" + ex + " UCRN: " + ucrn)
-        }
-          i
-      })
+  var elements, successes, failures, exceptions = 0
 
-//  private val sink = Sink.reduce((Try[HttpResponse], String)) {
-//    case (out, (util.Success(resp), ucrn)) => resp
-//  }
-
-//  val reduceSink = Sink.reduce[(Try[HttpResponse], String)](_ => {
-//    case (map, (util.Success(resp), ucrn)) =>
-//  })
-
-  //var elements, successes, failures, exceptions = 0
-  var elements = 0    // number of input elements for job (includes any invalid input records)
-  var successes = 0   // successful 201 responses
-  var failures = 0    // unsuccessful (non-201) responses
-  var exceptions = 0  // exceptions - marshalling errors and failed requests
-
-  // Only elements that entered the Connection will reach the Sink
-  // ie. elements that failed marshalling will not have got this far.
   val sink: Sink[(Try[HttpResponse], String), Future[Done]] = Sink.foreach[(Try[HttpResponse], String)]({
     case (util.Success(resp), ucrn) =>
       resp.status.intValue match {
@@ -150,34 +119,31 @@ object Client extends App {
       exceptions += 1
       logException.error("for UCRN " + ucrn + " Problem: " + ex.getMessage)
     }
-//    case (util.Success(resp), ucrn) if resp.status.intValue() == 201 => successes += 1
-//    case (util.Success(resp), ucrn) if resp.status.intValue() != 201 => failures += 1
-//    case (util.Failure(ex), ucrn) => exceptions += 1
-//    case (util.Success(resp), ucrn) if resp.status.intValue() == 201 => (ucrn, resp.status) :: successes
-//    case (util.Success(resp), ucrn) if resp.status.intValue() != 201 => (ucrn, resp.status) :: successes
-//    case (util.Failure(ex), ucrn) => (ucrn, ex) :: failures
   })
 
-  val realTimeWorkflow: Unit =
+  val workflow: Unit =
     source.
       via(delimiter).
       via(throttle).
-      map((bs: ByteString) => { elements += 1; bs }).
+      map((bs: ByteString) => { elements += 1; bs }). // log element before marshaller in case of marshalling exception
       via(marshaller).
       map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
       map((tup: (HttpRequest, String)) => {
-        logRequest.info(tup._1.toString())
+        tup._1.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { (body: ByteString) =>
+          logRequest.info(body.utf8String)
+        }
         (tup._1, tup._2)
       }).
       via(connection).
-      //via(logFlow).
       runWith(sink).onComplete((x: Try[Done]) => {
         analytics()
         system.terminate()
     })
 
+  //entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body => body.utf8String }
+
   def analytics(): Unit = {
-    Thread.sleep(1000) // ensure all analytics are captured before we try and access them.
+    Thread.sleep(1000) // Block briefly to ensure all analytics are captured before we try and access them.
     logAnalytics.info {
       s"\n\n Terminating job $jobId at ${Instant.ofEpochMilli(System.currentTimeMillis())} \n" +
         s" Writing Analytics ...... \n\n" +
@@ -193,51 +159,11 @@ object Client extends App {
     }
   }
 
-//  val workflow: Future[Map[String, HttpResponse]] =
-//    source.
-//      via(delimiter).
-//      via(throttle).
-//      via(marshaller).
-//      map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
-//      map((tup: (HttpRequest, String)) => {
-//        logRequest.info(tup._1.toString())
-//        (tup._1, tup._2)
-//      }).
-//      via(connection).
-//      // This folds over the complete Map which means that everything inside it is done in the future,
-//      // even the logging. If we want to write results in realtime then we need to use something
-//      // like the realTimeWorkflow
-//      runFold(Map.empty[String, HttpResponse]) {
-//        case (map, (util.Success(resp), ucrn)) => {
-//          resp.status.intValue match {
-//            case 201 => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-//              logSuccess.info("Created 201 [" + ucrn + "] BODY[" + body.utf8String + "]")
-//            }
-//            case status => resp.entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body =>
-//              logFailure.error("Status " + status + " [" + ucrn + "] BODY[" + body.utf8String + "]")
-//            }
-//          }
-//          map ++ Map(ucrn -> resp)}
-//        case (map, (util.Failure(ex), symbol)) => {
-//          logFailure.error("Exception " + ex.getMessage)
-//          map
-//        }
-//      }
-//
-//  workflow.onComplete((hr: Try[Map[String, HttpResponse]]) => {
-//    val respMap: Map[String, HttpResponse] = hr.get
-//    val total: Int = respMap.size
-//    val successes: Int = respMap.count(x => x._2.status.intValue() == 201)
-//    val failures: Int = respMap.count(x => x._2.status.intValue() != 201)
-//    logAnalytics.info {
-//      s"Terminating job $jobId \n\n" +
-//        s"/------------ Analytics (job $jobId) ------------/\n\n" +
-//        " Total elements processed  = " + respMap.size + "\n" +
-//        " Successes                 = " + successes + "\n" +
-//        " Failures                  = " + failures + "\n" +
-//        " Mismatches (Network?)     = " + (total - (successes + failures)) + "  \n"
-//    }
-//    system.terminate()
-//  })
+  logAnalytics.info(
+    s"Starting BF job $jobId \n\n" +
+      "Data source: " + filePath + "\n" +
+      "Consuming endpoint: https://" + apiHost + ":" + apiPort + apiPath +
+      " (at rate: " + throttleElements + " request(s) / " + throttlePer + " sec(s)) \n"
+  )
 
 }
