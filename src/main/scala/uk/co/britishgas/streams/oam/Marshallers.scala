@@ -20,18 +20,7 @@ object Marshallers {
     implicit val dataFormat: JsonFormat[JsonApiData[Customer]] = jsonFormat3(JsonApiData[Customer])
     implicit val rootFormat: RootJsonFormat[JsonApiRoot[Customer]] = jsonFormat1(JsonApiRoot[Customer])
   }
-
-  // Array  0      1     2       3                4                   5      6     7
-  // 003005400528|Mr|Jonathan|Jackson|jonathan.jackson@centrica.com|BG,SE|active|PPOT3
-  // UCRN - not empty
-  // Title - not empty
-  // Name - not empty
-  // Surname - not empty
-  // Email not -empty
-  // Brands not empty Array - not longr than 2 - to uppercase
-  // active - not empty - to lowercase
-  // channel - can be empty
-
+  
   private def checkInputArray(arr: Array[String]): Boolean =
     if(arr.length >= 7) true
     else throw InvalidInputException("Input array was below mandatory length (>= 7 fields)")
@@ -51,7 +40,6 @@ object Marshallers {
   private def marshalCustomer(in: String): Try[String] = {
     import CustomerJsonProtocol._
     Try {
-      //return Failure(InvalidInputException("### ITS ALL BOLLOCKS!"))
       val input: Array[String] = in.trim.split("\\|")
       checkInputArray(input)
       val ucrn: String = extractToken(input(0), "ucrn")
