@@ -84,7 +84,17 @@ chmod -Rf 755 bg-cargo-1.0
 
 ## Configuration
 
-The default configuration is located at `src/main/resources/application.conf` and is packaged within the application Jar file when building/deploying a binary distribution. ie. you cannot conveniently amend it. The default configuration can easily be overridden however by specifying an external configuration source as a system property at runtime.
+The default configuration is located at `src/main/resources/application.conf` and is packaged within the application Jar file when building/deploying a binary distribution. ie. you cannot conveniently amend it. The default configuration can easily be complemented, and overridden, however, by specifying an additional configuration source as a system property at runtime. 
+
+
+#### Sensitive configuration properties
+
+For sensitive configuration properties - such as production environment security headers - you must use an additional configuration source as instructed below. You should not check such properties into this source code repository otherwise you will risk compromising the security of the API platform.
+
+
+#### Using an additional configuration source
+
+To specify a configuration source (to add to, and override, the defaults) when running the application, specify it as a system property as follows.
 
 ```bash
 bin/bg-cargo -Dconfig.file=./configuration.conf
