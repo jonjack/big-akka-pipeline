@@ -125,7 +125,7 @@ object Client extends App {
     source.
       via(delimiter).
       via(throttle).
-      map((bs: ByteString) => { elements += 1; bs }). // log element before marshaller in case of marshalling exception
+      map((bs: ByteString) => { elements += 1; bs }).
       via(marshaller).
       map((tup: (String, String)) => (buildRequest(tup._2), tup._1)).
       map((tup: (HttpRequest, String)) => {
@@ -139,8 +139,6 @@ object Client extends App {
         analytics()
         system.terminate()
     })
-
-  //entity.dataBytes.runFold(ByteString(""))(_ ++ _).foreach { body => body.utf8String }
 
   def analytics(): Unit = {
     Thread.sleep(1000) // Block briefly to ensure all analytics are captured before we try and access them.

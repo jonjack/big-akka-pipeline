@@ -40,25 +40,51 @@ Prerequisites for building a distribution are:-
 - [SBT 1.0+](http://www.scala-sbt.org/download.html)
 
 
-To build a distribution for Linux.
+To build a distribution for Linux run the following SBT command whilst located in the root of the application.
 
 ```bash
 sbt universal:packageZipTarball
 ```
 
+The package will be located in the following path of the source project.
+
+```scala
+target/universal/bg-cargo-[RELEASE].tgz
+```
+
 
 ## Deployment & Permisisons
 
-Move the tar (eg. `bg-cargo-1.0.tgz`) to the target host and unpack it.
+Move the release file - eg. `bg-cargo-1.0.tgz` - to the target host and unpack it.
 
-Check the permissions of unpacked application. The user you run the application under needs rwx permissions on pretty much everything inside the unpacked directory so you may need to switch to that user and run `chmod -Rf 755 bg-cargo-1.0`
+```scala
+tar -xzvf bg-cargo-0.3.tgz
+```
+
+The layout of the application.
+
+```scala
+  |
+  |--bin    // startup scripts
+  |   
+  |--lib    // compiled app + thrid-party dependencies
+  |   |
+  |  bg-cago-1.0.jar  - the application is packaged within this jar
+  |  ... 
+  |  ...
+  |
+```
+
+Check the permissions of the unpacked application directories and files. The user you run the application under needs rwx permissions on pretty much everything inside the unpacked directory so you may need to switch to that user and run 
+
+```scala
+chmod -Rf 755 bg-cargo-1.0
+```
 
 
 ## Configuration
 
-The default configuration is located at `src/main/resources/application.conf` and is packaged within the application Jar file when building/deploying a binary distribution.
-
-The default configuration can be overridden by specifying an external configuration source as a system property at runtime.
+The default configuration is located at `src/main/resources/application.conf` and is packaged within the application Jar file when building/deploying a binary distribution. ie. you cannot conveniently amend it. The default configuration can easily be overridden however by specifying an external configuration source as a system property at runtime.
 
 ```bash
 bin/bg-cargo -Dconfig.file=./configuration.conf
