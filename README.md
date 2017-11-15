@@ -111,11 +111,11 @@ include "application"
 # source-dir=/path/to/source/directory
 # source-file=datasource.txt
 
-# api-host=digital1.3utilities.com
+# api-host=[HOSTNAME or IP]
 # api-port=443
 
-# cid=4d85090c-8b6d-4cba-9327-c024643be989
-# buk=ABC
+# cid=xxx
+# buk=xxx
 
 # throttle-elements=1
 # throttle-per=1
