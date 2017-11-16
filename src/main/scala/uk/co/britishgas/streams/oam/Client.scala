@@ -1,24 +1,21 @@
 package uk.co.britishgas.streams.oam
 
 import java.nio.file.{Path, Paths}
-
 import java.time.Instant
 
-import akka.{Done, NotUsed}
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.stream.scaladsl.{FileIO, Flow, Framing, Keep, Sink, Source}
+import akka.stream.scaladsl.{FileIO, Flow, Framing, Sink, Source}
 import akka.stream.{IOResult, ThrottleMode}
 import akka.util.ByteString
-
+import akka.{Done, NotUsed}
 import spray.json._
+import uk.co.britishgas.streams._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
-
-import uk.co.britishgas.streams._
 
 /** Batch creator of OAM records.
  * An Akka stream workflow which will process a potentially unbounded source

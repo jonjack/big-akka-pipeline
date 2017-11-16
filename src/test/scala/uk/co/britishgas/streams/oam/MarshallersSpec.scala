@@ -2,8 +2,8 @@ package uk.co.britishgas.streams.oam
 
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.json._
-import uk.co.britishgas.streams.oam.Model._
 import uk.co.britishgas.streams._
+import uk.co.britishgas.streams.oam.Model._
 
 class MarshallersSpec extends FlatSpecLike with Matchers {
 

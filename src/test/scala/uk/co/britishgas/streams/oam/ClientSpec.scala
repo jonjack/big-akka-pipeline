@@ -1,16 +1,8 @@
 package uk.co.britishgas.streams.oam
 
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
-import akka.util.ByteString
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import uk.co.britishgas.streams._
-
-import scala.collection.immutable
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.util.Try
 
 class ClientSpec extends TestKit(ActorSystem("ClientSpec"))
   with FlatSpecLike with Matchers with BeforeAndAfterAll  {

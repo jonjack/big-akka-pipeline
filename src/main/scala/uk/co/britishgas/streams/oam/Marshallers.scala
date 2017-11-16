@@ -1,11 +1,10 @@
 package uk.co.britishgas.streams.oam
 
-import akka.event.{Logging, LoggingAdapter}
 import spray.json._
 import uk.co.britishgas.streams._
 import uk.co.britishgas.streams.oam.Model.Customer
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object Marshallers {
 
